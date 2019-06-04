@@ -1,13 +1,11 @@
 #!/bin/bash
 
-
-
 #######################################################################################
 # Declare the required variables.                                                     #
 #######################################################################################
 InitSettings(){
- EXCLUDE=/home/neep/music_sripts/exclude.dirs
-FLAGFILE=/home/neep/music_sripts/lastrun_AUDI
+ EXCLUDE=/home/neep/music_scripts/exclude.dirs
+FLAGFILE=/home/neep/music_scripts/lastrun_AUDI
   SOURCE=/mnt/neep-nas/iTunes/Music/Music
 PLAYLIST_SOURCE=/mnt/neep-nas/iTunes/playlist
 #
@@ -15,7 +13,7 @@ PLAYLIST_SOURCE=/mnt/neep-nas/iTunes/playlist
 #
 if [ $(mount -t cifs 2>/dev/null | grep -wc neep-nas) -eq 0 ]
 then
-    mount -t cifs //192.168.1.110/service /mnt/neep-nas -o user=admin -o password=neepies12
+    mount -t cifs -o vers=1.0 //192.168.1.110/service /mnt/neep-nas -o user=admin -o password=${PASSWORD}
     if [  $(mount -t cifs 2>/dev/null | grep -wc neep-nas) -eq 0 ]
     then
         echo -e "\t /mnt/neep-nas niet aanwezig...exiting! \t\t"; exit 99
@@ -27,12 +25,13 @@ then
        PHONE_TARGET=/media/neep/9C33-6BBD/Music
              TARGET=/media/neep/0123-4567/Artists
     PLAYLIST_TARGET=/media/neep/0123-4567/Playlists
+     BEST_OF_TARGET=/media/neep/0123-4567/Best_Of
      PLAYLIST_PHONE=/media/neep/9C33-6BBD/Playlists
 else
-             TARGET=/home/neep/music_sripts/m3u
-    PLAYLIST_TARGET=/home/neep/music_sripts/Playlists
+             TARGET=/home/neep/music_scripts/m3u
+    PLAYLIST_TARGET=/home/neep/music_scripts/Playlists
 fi
-mkdir -p ${TARGET} ${PLAYLIST_TARGET} 2>/dev/null
+mkdir -p ${BEST_OF_TARGET} ${TARGET} ${PLAYLIST_TARGET} 2>/dev/null
 }
 
 #######################################################################################
@@ -53,7 +52,7 @@ do
              { { if ( tolower($1) ~ /neep-nas/ ) 
                     print substr($0,32) 
                   else
-                    { { if ( tolower($1) ~ /neepies/ )  
+                    { { if ( tolower($1) ~ /'${PASSWORD}'/ )  
                            print substr($0,43) 
                         else
                            print $0
@@ -65,7 +64,13 @@ do
        }'              ${PLAYLIST_SOURCE}/"${PLAYLISTS[$NR]}" | uniq > ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}".$$
   if [[ $? -eq 0 && -s ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}".$$ ]]
   then
-      mv -f             ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}".$$      ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}"
+      if [ $(echo ${PLAYLISTS[$NR]} | grep -wc ^Best) -eq 0 ]
+      then
+          TO_DIR=${PLAYLIST_TARGET}
+      else
+          TO_DIR=${BEST_OF_TARGET}
+      fi
+      mv -f            ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}".$$ ${TO_DIR}/"${PLAYLISTS[$NR]}"
   fi
   awk '{ { if ( $0 ~ /^#/ )
               print $0 
@@ -78,21 +83,21 @@ do
                 }
               }
          }
-       }' ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}" > ~neep/music_sripts/Playlists_LNX/"${PLAYLISTS[$NR]}"
-       cp -fp ~neep/music_sripts/Playlists_LNX/"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_lnx
+       }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_LNX/"${PLAYLISTS[$NR]}"
+       cp -fp                             ~neep/music_scripts/Playlists_LNX/"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_lnx
   awk '{ { if ( $0 ~ /^#/ )
               print $0
            else
               { gsub( "\\", "/", $0 )
                 { if ( tolower($1) ~ /^\/music/ )
-                     print "smb://neepies:neepies12@192.168.1.110/service/iTunes/Music"$0
+                     print "smb://neepies:${PASSWORD}@192.168.1.110/service/iTunes/Music"$0
                   else
                      print $0
                 }
               }
          }
-       }' ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}" > ~neep/music_sripts/Playlists_AND/"${PLAYLISTS[$NR]}"
-       cp -fp ~neep/music_sripts/Playlists_AND/"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_and
+       }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_AND/"${PLAYLISTS[$NR]}"
+       cp -fp                             ~neep/music_scripts/Playlists_AND/"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_and
   awk '{ { if ( $0 ~ /^#/ )
               print $0
            else
@@ -105,8 +110,8 @@ do
                 }
               }
          }
-       }' ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}" > ~neep/music_sripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}"
-       cp -fp ~neep/music_sripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_phn/000_"${PLAYLISTS[$NR]}"
+       }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}"
+       cp -fp                             ~neep/music_scripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_phn/000_"${PLAYLISTS[$NR]}"
        # 
        # hier moet het komen...
        #
@@ -153,7 +158,7 @@ do
            else
               { gsub( "\\", "/", $0 )
                 { if ( tolower($1) ~ /^\/music/ )
-                     print "smb://neepies:neepies12@192.168.1.110/service/iTunes/Music"$0
+                     print "smb://neepies:${PASSWORD}@192.168.1.110/service/iTunes/Music"$0
                   else
                      print $0
                 }
@@ -165,22 +170,22 @@ done< <(find "${SOURCE}"/ -type f -newer ${FLAGFILE} 2>/dev/null | grep -we mp3$
 
 
 #######################################################################################
-# Create directory with the last/latest 150 songs and the Latest150-Playlist.         #
+# Create directory with the last/latest 200 songs and the Latest200-Playlist.         #
 #######################################################################################
-CreateLatest150Directory(){ 
+CreateLatest200Directory(){ 
 #
-# Create a directory and playlist which contains the latest 150 added songs to the library:
+# Create a directory and playlist which contains the latest 200 added songs to the library:
 #
 typeset -i PROCESSED=0
-mkdir -p ${MUSIC_TARGET}/150Latest 1>/dev/null 2>&1
-echo -e "\t Processing Latest 150-Songs   :"
-echo -e "#EXTM3U\015" >${PLAYLIST_TARGET}/Latest-150.m3u
+mkdir -p ${MUSIC_TARGET}/200Latest 1>/dev/null 2>&1
+echo -e "\t Processing Latest 200-Songs   :"
+echo -e "#EXTM3U\015" >${PLAYLIST_TARGET}/Latest-200.m3u
 while read FIND_FROM
 do
   while read FILE
   do
     ((PROCESSED+=1))
-    if [ ${PROCESSED} -gt 150 ]
+    if [ ${PROCESSED} -gt 200 ]
     then
         break
     fi
@@ -192,20 +197,20 @@ do
                                                     $1 ~ / album /                        {    album=$2                               }
                                                     $1 ~ / artist /                       {   artist=substr($2,2)                     }
                                                     $1 ~ / title / && length(title) == 0  {    title=$2                               }
-                                                    END{ print "#EXTINF:"duration","artist" -"title" :"album"\015" >>"'${PLAYLIST_TARGET}'/Latest-150.m3u"
+                                                    END{ print "#EXTINF:"duration","artist" -"title" :"album"\015" >>"'${PLAYLIST_TARGET}'/Latest-200.m3u"
                                                          print artist" -"album" -"title".'${EXT}'"     
                                                        }')
-    echo       -e "\Music\\150Latest\\${COPY_FILE}\015" >>${PLAYLIST_TARGET}/Latest-150.m3u
+    echo       -e "\Music\\200Latest\\${COPY_FILE}\015" >>${PLAYLIST_TARGET}/Latest-200.m3u
     echo -e "\t                               : $(echo ${PROCESSED} | awk '{ printf "%3.3d\n",$1 }') \c"
-    if [ ! -s "${MUSIC_TARGET}/150Latest/${COPY_FILE}" ]
+    if [ -s "${MUSIC_TARGET}/200Latest/${COPY_FILE}" ]
     then
-        echo "copy: ${COPY_FILE}"
-        cp -fp "${FILE}" "${MUSIC_TARGET}/150Latest/${COPY_FILE}" 1>/dev/null 2>&1
-    else
         echo "skip: ${COPY_FILE}"
+    else
+        echo "copy: ${COPY_FILE}"
+        cp -fp "${FILE}" "${MUSIC_TARGET}/200Latest/${COPY_FILE}" 1>/dev/null 2>&1
     fi
     
-  done< <(find "${FIND_FROM}"/ -type f -ctime -300 \( -name "*.mp3" -o -name "*.m4a" \) 2>/dev/null | fgrep -vf ${EXCLUDE} |\
+  done< <(find "${FIND_FROM}"/ -type f -ctime -450 \( -name "*.mp3" -o -name "*.m4a" \) 2>/dev/null | fgrep -vf ${EXCLUDE} |\
                  awk '{ ("stat -c %X ""\""  $0 "\"" ) | getline date
                         print date":"$0
                      }' | sort -nr | awk -F: '{ print $2 }')
@@ -224,23 +229,23 @@ awk '{ { if ( $0 ~ /^#/ )
              }
            }
        }
-     }' ${PLAYLIST_TARGET}/Latest-150.m3u > /mnt/neep-nas/iTunes/playlist_lnx/Latest-150.m3u
+     }' ${PLAYLIST_TARGET}/Latest-200.m3u > /mnt/neep-nas/iTunes/playlist_lnx/Latest-200.m3u
 awk '{ { if ( $0 ~ /^#/ )
             print $0
          else
             { gsub( "\\", "/", $0 )
               { if ( tolower($1) ~ /^\/music/ )
-                   print "smb://neepies:neepies12@192.168.1.110/service/iTunes/Music"$0
+                   print "smb://neepies:${PASSWORD}@192.168.1.110/service/iTunes/Music"$0
                 else
                    print $0
               }
             }
        }
-     }' ${PLAYLIST_TARGET}/Latest-150.m3u > /mnt/neep-nas/iTunes/playlist_and/Latest-150.m3u
+     }' ${PLAYLIST_TARGET}/Latest-200.m3u > /mnt/neep-nas/iTunes/playlist_and/Latest-200.m3u
 # 
-# Now make sure to remain just 150-songs:
+# Now make sure to remain just 200-songs:
 #
-ls -1t ${MUSIC_TARGET}/150Latest/* 2>/dev/null | grep -we mp3$ -we m4a$ | awk 'NR>151 { system("rm -f ""\""  $0 "\"" ) } '
+ls -1t ${MUSIC_TARGET}/200Latest/* 2>/dev/null | grep -we mp3$ -we m4a$ | awk 'NR>201 { system("rm -f ""\""  $0 "\"" ) } '
 }
 
 #######################################################################################
@@ -269,7 +274,7 @@ fi
 InitSettings
 ConvertiTunesPlaylists
 CreateArtistPlaylists
-CreateLatest150Directory
+CreateLatest200Directory
 Copy2SDCard
 #                                                                                     #
 #-------------------------------------------------------------------------------------#
