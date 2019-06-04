@@ -65,7 +65,7 @@ then
            { if ( $0 ~ /^<key>Track ID<\\key><integer>/   ) print $0 }
          }' "${ITUNES_FILE}" > /tmp/ITUNES_FILE.$$
 
-    START=$(awk '$1 ~ /^<key>Name<\\key><string>Artists$/ { print NR-1 }' /tmp/ITUNES_FILE.$$)
+    START=$(awk '$0 ~ /^<key>Name<\\key><string>Best of\.\.\.$/ { print NR-1 }' /tmp/ITUNES_FILE.$$)
     eval  $(awk 'BEGIN{ i=0 }
                  NR>'${START}' { { if ( $1 ~ /^<key>Name<\\key><string>/                 )
                                       { gsub( "<key>Name<\\\key><string>",        "", $0 )
