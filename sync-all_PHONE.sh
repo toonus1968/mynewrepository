@@ -5,7 +5,7 @@
 #######################################################################################
 InitSettings(){
  EXCLUDE=/home/neep/music_scripts/exclude.dirs
-FLAGFILE=/home/neep/music_scripts/lastrun_PHONE
+FLAGFILE=/mnt/neep-nas/iTunes/lastrun_PHONE
   SOURCE=/mnt/neep-nas/iTunes/Music/Music
 PLAYLIST_SOURCE=/mnt/neep-nas/iTunes/playlist
 #

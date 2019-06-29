@@ -5,7 +5,7 @@
 #######################################################################################
 InitSettings(){
  EXCLUDE=/home/neep/music_scripts/exclude.dirs
-FLAGFILE=/home/neep/music_scripts/lastrun_AUDI
+FLAGFILE=/mnt/neep-nas/iTunes/lastrun_AUDI
   SOURCE=/mnt/neep-nas/iTunes/Music/Music
 PLAYLIST_SOURCE=/mnt/neep-nas/iTunes/playlist
 #
@@ -214,9 +214,9 @@ do
                  awk '{ ("stat -c %X ""\""  $0 "\"" ) | getline date
                         print date":"$0
                      }' | sort -nr | awk -F: '{ print $2 }')
-done< <(find ${SOURCE}/ -type d -newer lastrun_AUDI 2>/dev/null | grep -vw Music/$ | awk '{ ("stat -c %X ""\""  $0 "\"" ) | getline date
-                                                                                       print date":"$0
-                                                                                     }' | awk -F/ 'NF>7 { print $0 }' | sort -nr | awk -F: 'NR<35 { print $2 }')
+done< <(find ${SOURCE}/ -type d -newer ${FLAGFILE} 2>/dev/null | grep -vw Music/$ | awk '{ ("stat -c %X ""\""  $0 "\"" ) | getline date
+                                                                                           print date":"$0
+                                                                                         }' | awk -F/ 'NF>7 { print $0 }' | sort -nr | awk -F: 'NR<35 { print $2 }')
 
 awk '{ { if ( $0 ~ /^#/ )
            print $0
