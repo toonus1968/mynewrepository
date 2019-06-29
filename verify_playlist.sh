@@ -48,5 +48,4 @@ do
     fi
     ((NUM_I+=1))
   done 
-  read dummy
 done

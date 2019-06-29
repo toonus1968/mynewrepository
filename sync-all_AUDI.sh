@@ -132,7 +132,7 @@ do
   ( echo -e "#EXTM3U\015"
     while read FILE
     do
-      avconv -i "${FILE}" 2>&1 | awk -F: 'BEGIN{ printf "#EXTINF:" }
+      ffmpeg -i "${FILE}" 2>&1 | awk -F: 'BEGIN{ printf "#EXTINF:" }
                                           $1 ~ / Duration$/                     { duration=($2*3600)+($3*60)+substr($4,1,2) }
                                           $1 ~ / album /                        {    album=$2                               }
                                           $1 ~ / artist /                       {   artist=$2                               }
@@ -193,7 +193,7 @@ do
           *.mp3) EXT=mp3 ;;
           *.m4a) EXT=m4a ;;
     esac
-    COPY_FILE=$(avconv -i "${FILE}" 2>&1 | awk -F: '$1 ~ / Duration$/                     { duration=($2*3600)+($3*60)+substr($4,1,2) }
+    COPY_FILE=$(ffmpeg -i "${FILE}" 2>&1 | awk -F: '$1 ~ / Duration$/                     { duration=($2*3600)+($3*60)+substr($4,1,2) }
                                                     $1 ~ / album /                        {    album=$2                               }
                                                     $1 ~ / artist /                       {   artist=substr($2,2)                     }
                                                     $1 ~ / title / && length(title) == 0  {    title=$2                               }
@@ -272,10 +272,10 @@ fi
 #-------------------------------------------------------------------------------------#
 #                                                                                     #
 InitSettings
-ConvertiTunesPlaylists
-CreateArtistPlaylists
+##ConvertiTunesPlaylists
+##CreateArtistPlaylists
 CreateLatest200Directory
-Copy2SDCard
+##Copy2SDCard
 #                                                                                     #
 #-------------------------------------------------------------------------------------#
 ################################## Main Script ########################################
