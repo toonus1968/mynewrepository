@@ -123,9 +123,6 @@ do
          }
        }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}"
        cp -fp                             ~neep/music_scripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_phn/000_"${PLAYLISTS[$NR]}"
-       # 
-       # hier moet het komen...
-       #
   ((NR+=1))
 done
 }
