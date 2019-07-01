@@ -1,5 +1,18 @@
 #!/bin/bash
 
+if [ $# -ne 0 ]
+then
+   if  [ $# -eq 1 ]
+   then
+       case $(echo $1 | awk '{ print tolower($1) }') in
+        --no_verify) NO_VERIFY=true                                                                                   ;;
+                  *) echo -e "\n\n\t\t`tput rev`**ERROR**`tput sgr0` usage: $(basename $0) [--no_verify]\n\n";exit 99 ;;
+       esac
+   else
+       echo                -e "\n\n\t\t`tput rev`**ERROR**`tput sgr0` usage: $(basename $0) [--no_verify]\n\n";exit 99
+   fi
+fi
+
 #######################################################################################
 # Declare the required variables.                                                     #
 #######################################################################################
@@ -22,11 +35,9 @@ fi
 if [ -d             /media/neep/0123-4567/Music ]
 then
        MUSIC_TARGET=/media/neep/0123-4567/Music
-       PHONE_TARGET=/media/neep/9C33-6BBD/Music
              TARGET=/media/neep/0123-4567/Artists
     PLAYLIST_TARGET=/media/neep/0123-4567/Playlists
      BEST_OF_TARGET=/media/neep/0123-4567/Best_Of
-     PLAYLIST_PHONE=/media/neep/9C33-6BBD/Playlists
 else
              TARGET=/home/neep/music_scripts/m3u
     PLAYLIST_TARGET=/home/neep/music_scripts/Playlists
@@ -257,25 +268,64 @@ then
     cd "${SOURCE}"
     find . -type f -newer ${FLAGFILE} | cpio --no-preserve-owner -padmuv ${MUSIC_TARGET} 2>/dev/null
     touch                 ${FLAGFILE}
-    if [ -d  /media/neep/9C33-6BBD/Music ]
-    then
-        #
-        # Sync the contents of the 2 sims:
-        #
-        cd  ${MUSIC_TARGET}
-        find . -type f -newer ${FLAGFILE} | cpio --no-preserve-owner -padmuv ${PHONE_TARGET} 2>/dev/null
-    fi
 fi
+}
+
+#######################################################################################
+# Verify the playlists which are on the USB-stick.                                    #
+#######################################################################################
+VerifyPlaylists(){ 
+for DIR in ${TARGET} ${PLAYLIST_TARGET} ${BEST_OF_TARGET}
+do
+  unset NUM_I NUM_II PLAYLIST PLAYLISTS
+  cd ${DIR};[[ $? -ne 0 || ! -d ${STICK}/${DIR} ]] && echo "Directory ${DIR} doesn't exist..." && break
+
+  while read PLAYLIST
+  do
+    PLAYLISTS[${NUM_I}]="${PLAYLIST}" 
+    ((NUM_I+=1))
+  done < <(ls -1 *m3u)
+  typeset -i NUM_I=0
+  while [  ${NUM_I} -lt ${#PLAYLISTS[@]} ]
+  do
+    unset OKS ERRORS;typeset -i NUM_II=0
+    echo -e "Verifying ${PLAYLISTS[${NUM_I}]}..."
+    while read SONG
+    do
+      if [ -s "${SONG}" ]
+      then
+             OKS[${NUM_II}]="${SONG}"
+      else
+          ERRORS[${NUM_II}]="${SONG}"
+      fi
+      ((NUM_II+=1))
+    done < <(awk -v dir=$(dirname ${DIR}) '$1 ~ /^\\/ { gsub( "\\",  "/",$0 )
+                                                        gsub( "\015", "",$0 ); print dir$0 }' "${PLAYLISTS[${NUM_I}]}")
+    if [ ${#ERRORS[@]} -eq 0 ]
+    then
+        echo -e "  [ok] : all songs (${#OKS[@]}) exist for: ${DIR}/${PLAYLISTS[${NUM_I}]}..."
+    else
+        echo -e "  [ok] : NOT all   (${#ERRORS[@]}) songs exist for: ${DIR}/${PLAYLISTS[${NUM_I}]}..."
+        for ERROR in "${ERRORS[@]}"
+        do
+          echo -e "       : ${ERROR}"
+        done
+        read dummy
+    fi
+    ((NUM_I+=1))
+  done 
+done
 }
 
 ################################## Main Script ########################################
 #-------------------------------------------------------------------------------------#
 #                                                                                     #
 InitSettings
-##ConvertiTunesPlaylists
-##CreateArtistPlaylists
-CreateLatest200Directory
-##Copy2SDCard
+ConvertiTunesPlaylists
+CreateArtistPlaylists
+echo CreateLatest200Directory
+Copy2SDCard
+[[ "${NO_VERIFY:=false}" != true ]] && VerifyPlaylists
 #                                                                                     #
 #-------------------------------------------------------------------------------------#
 ################################## Main Script ########################################

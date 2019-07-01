@@ -56,9 +56,10 @@ then
            gsub(           "%C3%A9",     "\303\251", $0 )
            gsub(           "%C3%AA",     "\303\252", $0 )
            gsub(           "%C3%B3",     "\303\263", $0 )
-           gsub(           "%C2%BA",     "\303\272", $0 )
            gsub(           "%C3%AD",     "\303\255", $0 )
            gsub(           "%C3%BC",     "\303\274", $0 )
+           gsub(           "%C3%A8",     "\303\250", $0 )
+           gsub(           "%C2%BA",     "\302\272", $0 )
            { if ( $1 ~ /^<key>[0-9]/                      ) print $0 }
            { if ( $1 ~ /^<key>Name<\\key><string>/        ) print $0 }
            { if ( $1 ~ /^<key>Artist<\\key><string>/      ) print $0 }

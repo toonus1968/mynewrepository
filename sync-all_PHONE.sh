@@ -1,5 +1,19 @@
 #!/bin/bash
 
+if [ $# -ne 0 ]
+then
+   if  [ $# -eq 1 ]
+   then
+       case $(echo $1 | awk '{ print tolower($1) }') in
+        --no_verify) NO_VERIFY=true                                                                                   ;;
+                  *) echo -e "\n\n\t\t`tput rev`**ERROR**`tput sgr0` usage: $(basename $0) [--no_verify]\n\n";exit 99 ;;
+       esac
+   else
+       echo                -e "\n\n\t\t`tput rev`**ERROR**`tput sgr0` usage: $(basename $0) [--no_verify]\n\n";exit 99
+   fi
+fi
+
+
 #######################################################################################
 # Declare the required variables.                                                     #
 #######################################################################################
@@ -46,11 +60,58 @@ then
 fi
 }
 
+#######################################################################################
+# Verify the playlists which are on the USB-stick.                                    #
+#######################################################################################
+VerifyPlaylists(){
+for DIR in ${TARGET} ${PLAYLIST_TARGET} 
+do
+  unset NUM_I NUM_II PLAYLIST PLAYLISTS
+  cd ${DIR};[[ $? -ne 0 || ! -d ${STICK}/${DIR} ]] && echo "Directory ${DIR} doesn't exist..." && break
+
+  while read PLAYLIST
+  do
+    PLAYLISTS[${NUM_I}]="${PLAYLIST}"
+    ((NUM_I+=1))
+  done < <(ls -1 *m3u)
+  typeset -i NUM_I=0
+  while [  ${NUM_I} -lt ${#PLAYLISTS[@]} ]
+  do
+    unset OKS ERRORS;typeset -i NUM_II=0
+    echo -e "Verifying ${PLAYLISTS[${NUM_I}]}..."
+    while read SONG
+    do
+      if [ -s "${SONG}" ]
+      then
+             OKS[${NUM_II}]="${SONG}"
+      else
+          ERRORS[${NUM_II}]="${SONG}"
+      fi
+      ((NUM_II+=1))
+    done < <(awk -v dir=$(dirname ${DIR}) '$1 ~ /^\\/ { gsub( "\\",  "/",$0 )
+                                                        gsub( "\015", "",$0 ); print dir$0 }' "${PLAYLISTS[${NUM_I}]}")
+    if [ ${#ERRORS[@]} -eq 0 ]
+    then
+        echo -e "  [ok] : all songs (${#OKS[@]}) exist for: ${DIR}/${PLAYLISTS[${NUM_I}]}..."
+    else
+        echo -e "  [ok] : NOT all   (${#ERRORS[@]}) songs exist for: ${DIR}/${PLAYLISTS[${NUM_I}]}..."
+        for ERROR in "${ERRORS[@]}"
+        do
+          echo -e "       : ${ERROR}"
+        done
+        read dummy
+    fi
+    ((NUM_I+=1))
+  done
+done
+}
+
 ################################## Main Script ########################################
 #-------------------------------------------------------------------------------------#
 #                                                                                     #
 InitSettings
 Copy2SDCard
+[[ "${NO_VERIFY:=false}" != true ]] && VerifyPlaylists
 #                                                                                     #
 #-------------------------------------------------------------------------------------#
 ################################## Main Script ########################################
