@@ -1,2 +1,7 @@
 #find . -type f -name "*mp3" | awk '{ system("normalize-audio ""\""  $0 "\"" ) }' 
-find ./[nN]* ./[oP]* ./[qQ]* ./[rR]*  -type f  \( -name "*.mp3" -o -name "*.m4a" \)  | awk '{ system("normalize-audio ""\""  $0 "\"" ) }'
+#find ./[nN]* ./[oP]* ./[qQ]* ./[rR]*  -type f  \( -name "*.mp3" -o -name "*.m4a" \)  | awk '{ system("normalize-audio ""\""  $0 "\"" ) }'
+find .  -type f \( -name "*.mp3" -o -name "*.m4a" \)  | awk '{ { if ( $0 ~ /.mp3/ )  system("mp3gain -c -r ""\""  $0 "\"" ) }
+                                                               { if ( $0 ~ /.m4a/ )  system("aacgain -c -r ""\""  $0 "\"" ) } }'
+
+
+find .  -type f  -name "*.m4a"  |  awk '{ system("echo aacgain -c -r ""\""  $0 "\"" ) }'

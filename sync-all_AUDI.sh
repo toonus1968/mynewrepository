@@ -263,8 +263,40 @@ Copy2SDCard(){
 if [ -d  /media/neep/0123-4567/Music ]
 then
     cd "${SOURCE}"
+    find . -type f -newer ${FLAGFILE} \( -name "*.mp3" -o -name "*.m4a" \) | awk '{ { if ( $0 ~ /.mp3/ ) system("mp3gain -c -r ""\""  $0 "\"" ) }
+                                                                                    { if ( $0 ~ /.m4a/ ) system("aacgain -c -r ""\""  $0 "\"" ) } }' 
     find . -type f -newer ${FLAGFILE} | cpio --no-preserve-owner -padmuv ${MUSIC_TARGET} 2>/dev/null
     touch                 ${FLAGFILE}
+fi
+}
+
+#######################################################################################
+# Create the joined Best_of_the_Best playlist.                                        #
+#######################################################################################
+CreateBestOfTheBest(){
+if [ -d ${BEST_OF_TARGET} ]
+then
+    cd  ${BEST_OF_TARGET}
+    ( while read PLAY_LIST
+      do
+        awk 'NR>1 { gsub( "\015", "", $0 )
+                    { if ( $1 ~  /^#EX/ )
+                         printf $0"::__::"
+                      else
+                         print  $0
+                  } }' "${PLAY_LIST}" 
+      done < <(ls -1 Best*m3u | grep -ve 'Best Of Afghan Whigs.m3u'      \
+                                     -ve 'Best Of John Frusciante.m3u'   \
+                                     -ve 'Best Of Silversun Pickups.m3u' \
+                                     -ve 'Best Of Smashing Pumpkins.m3u' \
+                                     -ve 'Best Of Thom Yorke.m3u'        \
+                                     -ve 'Best Of The Best.m3u'          \
+                                     -ve 'Best Of Warpaint.m3u' 
+              ) | shuf | awk 'BEGIN{ print "#EXTM3U\015" }
+                                   { gsub( "::__::", "\n", $0 ) 
+                                     print $0"\015" }'
+    ) > 'Best Of The Best.m3u'
+    cd -
 fi
 }
 
@@ -320,7 +352,8 @@ done
 InitSettings
 ConvertiTunesPlaylists
 CreateArtistPlaylists
-echo CreateLatest200Directory
+CreateLatest200Directory
+CreateBestOfTheBest
 Copy2SDCard
 [[ "${NO_VERIFY:=false}" != true ]] && VerifyPlaylists
 #                                                                                     #
