@@ -50,11 +50,11 @@ mkdir -p ${BEST_OF_TARGET} ${TARGET} ${PLAYLIST_TARGET} 2>/dev/null
 #######################################################################################
 ConvertiTunesPlaylists(){
 # 
-# Have all playlist such as they were exported from iTunes and stored on the NAS converted:
+# Have all playlists such as they were exported from iTunes and stored on the NAS converted:
 #
 eval $(find ${PLAYLIST_SOURCE}/ -type f 2>/dev/null | grep -w m3u$  | awk -F/ '{ print "PLAYLISTS["NR"]=\""$NF"\"" }')
 typeset -i NR=1
-while [ ${NR} -le ${#PLAYLISTS[@]} ]
+while [  ${NR} -le ${#PLAYLISTS[@]} ]
 do
   echo -e "\t Processing iTunes playlist:\t ${PLAYLISTS[$NR]}..."
   awk '{ { if ( $1 ~ /192.168/ ) 
@@ -217,7 +217,6 @@ do
         echo "copy: ${COPY_FILE}"
         cp -fp "${FILE}" "${MUSIC_TARGET}/200Latest/${COPY_FILE}" 1>/dev/null 2>&1
     fi
-    
   done< <(find "${FIND_FROM}"/ -type f -ctime -450 \( -name "*.mp3" -o -name "*.m4a" \) 2>/dev/null | fgrep -vf ${EXCLUDE} |\
                  awk '{ ("stat -c %X ""\""  $0 "\"" ) | getline date
                         print date":"$0
@@ -263,9 +262,11 @@ Copy2SDCard(){
 if [ -d  /media/neep/0123-4567/Music ]
 then
     cd "${SOURCE}"
+    find . -type f -newer ${FLAGFILE} | cpio --no-preserve-owner -padmuv ${MUSIC_TARGET} 2>/dev/null
+    cd ${MUSIC_TARGET}
     find . -type f -newer ${FLAGFILE} \( -name "*.mp3" -o -name "*.m4a" \) | awk '{ { if ( $0 ~ /.mp3/ ) system("mp3gain -c -r ""\""  $0 "\"" ) }
                                                                                     { if ( $0 ~ /.m4a/ ) system("aacgain -c -r ""\""  $0 "\"" ) } }' 
-    find . -type f -newer ${FLAGFILE} | cpio --no-preserve-owner -padmuv ${MUSIC_TARGET} 2>/dev/null
+    cd -
     touch                 ${FLAGFILE}
 fi
 }

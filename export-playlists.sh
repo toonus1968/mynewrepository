@@ -156,6 +156,20 @@ then
     echo -e "\n\n\t\t: ${PLAYLIST_NAME} contains extra/strange characters, please examine...\n\n"
     read dummy
 fi
+if [ "${PLAYLIST_NAME}" != "Kleine" ]
+then
+    echo -e "\t\t Shuffling: ${PLAYLIST_NAME}... \n" 
+    ( awk 'NR>1 { gsub( "\015", "", $0 )
+                 { if ( $1 ~  /^#EX/ )
+                      printf $0"::__::"
+                   else
+                       print  $0
+                } }' /tmp/temp.$$
+    ) | shuf | awk 'BEGIN{ print "#EXTM3U\015" }
+                    { gsub( "::__::", "\n", $0 )
+                    print $0"\015" }' >          /tmp/temp.$$.$$
+   [[ $? -eq 0 && -s /tmp/temp.$$.$$ ]] && mv -f /tmp/temp.$$.$$ /tmp/temp.$$
+fi
 mv -f /tmp/temp.$$ ${ON_NAS}/playlist/"${PLAYLIST_NAME}".m3u
 }
 

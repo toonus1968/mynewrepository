@@ -112,6 +112,8 @@ done
 InitSettings
 Copy2SDCard
 [[ "${NO_VERIFY:=false}" != true ]] && VerifyPlaylists
+
+echo " still to do... 200Latest and Best of The Best..." 
 #                                                                                     #
 #-------------------------------------------------------------------------------------#
 ################################## Main Script ########################################
