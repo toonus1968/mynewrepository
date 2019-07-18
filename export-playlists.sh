@@ -24,14 +24,13 @@ InitSettings(){
 #
 # Ensure the music on the NAS is accessable...otherwise don't do anything:
 #
-if [ $(mount -t cifs 2>/dev/null | grep -wc neep-nas) -eq 0 ]
+if [ $(mount      -t cifs 2>/dev/null | grep -wc neep-nas) -eq 0 ]
 then
-    mount -t cifs -o vers=1.0 //192.168.1.110/service /mnt/neep-nas -o user=admin -o password=${PASSWORD}
+    mount         -t cifs -o vers=1.0 //192.168.1.110/service /mnt/neep-nas -o user=admin -o password=${PASSWORD}
     if [  $(mount -t cifs 2>/dev/null | grep -wc neep-nas) -eq 0 ]
     then
         echo -e "\t /mnt/neep-nas niet aanwezig...exiting! \t\t"; exit 99
     fi
-fi
      ON_NAS=/mnt/neep-nas/iTunes
 ITUNES_FILE="${ON_NAS}/iTunes Music Library.xml"
 #
@@ -66,8 +65,7 @@ then
            { if ( $0  ~ /<key>Total Time<\\key><integer>/ ) print $0 }
            { if ( $1 ~ /^<key>Location<\\key><string>/    ) print $0 }
            { if ( $0 ~ /^<key>Track ID<\\key><integer>/   ) print $0 }
-         }' "${ITUNES_FILE}" > /tmp/ITUNES_FILE.$$
-
+         }' "${ITUNES_FILE}"                                                  > /tmp/ITUNES_FILE.$$
     START=$(awk '$0 ~ /^<key>Name<\\key><string>Best of\.\.\.$/ { print NR-1 }' /tmp/ITUNES_FILE.$$)
     eval  $(awk 'BEGIN{ i=0 }
                  NR>'${START}' { { if ( $1 ~ /^<key>Name<\\key><string>/                 )
@@ -105,7 +103,11 @@ do
                                  gsub(      "XooX",     "-", $0 )
                                  gsub(  "fourhero", "4Hero", $0 )
                                  print "PLAYLIST_NAME=\""$0"\"" }')
-  if [[ "${PLAYLIST_NAME}" !=  "Artists" && "${PLAYLIST_NAME}" != "Teep" && "${PLAYLIST_NAME}" != "Dekleine" && "${PLAYLIST_NAME}" != "Thuis" && "${PLAYLIST_NAME}" != "XXXXXXXX" ]]
+  if [[ "${PLAYLIST_NAME}" != "Artists"  && \
+        "${PLAYLIST_NAME}" != "Teep"     && \
+        "${PLAYLIST_NAME}" != "Dekleine" && \
+        "${PLAYLIST_NAME}" != "Thuis"    && \
+        "${PLAYLIST_NAME}" != "XXXXXXXX"   ]]
   then
       unset ANSWER
       while [[ "${ANSWER}" != "y" && "${ANSWER}" != "n" ]]
@@ -116,11 +118,9 @@ do
         tput cvvis
       done
       case ${ANSWER} in
-           y) echo -e "\t\tConfirmed to use:\t ${PLAYLIST_NAME}\n"
-              ;;
+           y) echo -e "\t\tConfirmed to use:\t ${PLAYLIST_NAME}\n" ;;
            n) echo -e   "\tDeclined to use :\t ${PLAYLIST_NAME}"
-              PLAYLIST[${NUM}]=""
-              ;;
+              PLAYLIST[${NUM}]=""                                  ;;
       esac
   else
       PLAYLIST[${NUM}]=""
@@ -160,17 +160,17 @@ if [ "${PLAYLIST_NAME}" != "Kleine" ]
 then
     echo -e "\t\t Shuffling: ${PLAYLIST_NAME}... \n" 
     ( awk 'NR>1 { gsub( "\015", "", $0 )
-                 { if ( $1 ~  /^#EX/ )
+                  { if ( $1 ~  /^#EX/ )
                       printf $0"::__::"
-                   else
-                       print  $0
-                } }' /tmp/temp.$$
+                    else
+                      print  $0
+                } }'                             /tmp/temp.$$
     ) | shuf | awk 'BEGIN{ print "#EXTM3U\015" }
                     { gsub( "::__::", "\n", $0 )
-                    print $0"\015" }' >          /tmp/temp.$$.$$
+                      print $0"\015" }'        > /tmp/temp.$$.$$
    [[ $? -eq 0 && -s /tmp/temp.$$.$$ ]] && mv -f /tmp/temp.$$.$$ /tmp/temp.$$
 fi
-mv -f /tmp/temp.$$ ${ON_NAS}/playlist/"${PLAYLIST_NAME}".m3u
+mv                                            -f /tmp/temp.$$ ${ON_NAS}/playlist/"${PLAYLIST_NAME}".m3u
 }
 
 ################################## Main Script ########################################

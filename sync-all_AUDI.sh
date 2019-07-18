@@ -17,16 +17,16 @@ fi
 # Declare the required variables.                                                     #
 #######################################################################################
 InitSettings(){
- EXCLUDE=/home/neep/music_scripts/exclude.dirs
-FLAGFILE=/mnt/neep-nas/iTunes/lastrun_AUDI
-  SOURCE=/mnt/neep-nas/iTunes/Music/Music
+        EXCLUDE=/home/neep/music_scripts/exclude.dirs
+       FLAGFILE=/mnt/neep-nas/iTunes/lastrun_AUDI
+         SOURCE=/mnt/neep-nas/iTunes/Music/Music
 PLAYLIST_SOURCE=/mnt/neep-nas/iTunes/playlist
 #
 # Ensure the music on the NAS is accessable...otherwise don't do anything:
 #
-if [ $(mount -t cifs 2>/dev/null | grep -wc neep-nas) -eq 0 ]
+if [ $(mount      -t cifs 2>/dev/null | grep -wc neep-nas) -eq 0 ]
 then
-    mount -t cifs -o vers=1.0 //192.168.1.110/service /mnt/neep-nas -o user=admin -o password=${PASSWORD}
+    mount         -t cifs -o vers=1.0 //192.168.1.110/service /mnt/neep-nas -o user=admin -o password=${PASSWORD}
     if [  $(mount -t cifs 2>/dev/null | grep -wc neep-nas) -eq 0 ]
     then
         echo -e "\t /mnt/neep-nas niet aanwezig...exiting! \t\t"; exit 99
@@ -67,13 +67,8 @@ do
                            print substr($0,43) 
                         else
                            print $0
-                      }
-                    }
-               }
-             }
-          }
-       }'              ${PLAYLIST_SOURCE}/"${PLAYLISTS[$NR]}" | uniq > ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}".$$
-  if [[ $? -eq 0 && -s ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}".$$ ]]
+       } }   } }    } }' ${PLAYLIST_SOURCE}/"${PLAYLISTS[$NR]}" | uniq > ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}".$$
+  if [[ $? -eq 0 && -s   ${PLAYLIST_TARGET}/"${PLAYLISTS[$NR]}".$$ ]]
   then
       if [ $(echo ${PLAYLISTS[$NR]} | grep -wc ^Best) -eq 0 ]
       then
@@ -91,11 +86,8 @@ do
                      print "/mnt/neep-nas/iTunes/Music"$0
                   else
                      print $0
-                }
-              }
-         }
-       }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_LNX/"${PLAYLISTS[$NR]}"
-       cp -fp                             ~neep/music_scripts/Playlists_LNX/"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_lnx
+       } }    } }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_LNX/"${PLAYLISTS[$NR]}"
+       cp -fp                                      ~neep/music_scripts/Playlists_LNX/"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_lnx
   awk '{ { if ( $0 ~ /^#/ )
               print $0
            else
@@ -104,11 +96,8 @@ do
                      print "smb://neepies:${PASSWORD}@192.168.1.110/service/iTunes/Music"$0
                   else
                      print $0
-                }
-              }
-         }
-       }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_AND/"${PLAYLISTS[$NR]}"
-       cp -fp                             ~neep/music_scripts/Playlists_AND/"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_and
+       } }    } }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_AND/"${PLAYLISTS[$NR]}"
+       cp -fp                                      ~neep/music_scripts/Playlists_AND/"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_and
   awk '{ { if ( $0 ~ /^#/ )
               print $0
            else
@@ -118,11 +107,8 @@ do
                      print "/storage/93c33-6BBD/Music"$0
                   else
                      print $0
-                }
-              }
-         }
-       }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}"
-       cp -fp                             ~neep/music_scripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_phn/000_"${PLAYLISTS[$NR]}"
+       } }    }  }' ${TO_DIR}/"${PLAYLISTS[$NR]}" > ~neep/music_scripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}"
+       cp -fp                                       ~neep/music_scripts/Playlists_PHN/000_"${PLAYLISTS[$NR]}" /mnt/neep-nas/iTunes/playlist_phn/000_"${PLAYLISTS[$NR]}"
   ((NR+=1))
 done
 }
@@ -157,10 +143,7 @@ do
                     print "/mnt/neep-nas/iTunes/Music"$0
                  else
                     print $0
-               }
-             }
-        }
-      }' ${TARGET}/"${ARTIST}".m3u  > /mnt/neep-nas/iTunes/playlist_lnx/Artists/"${ARTIST}".m3u
+       } }   } }' ${TARGET}/"${ARTIST}".m3u  > /mnt/neep-nas/iTunes/playlist_lnx/Artists/"${ARTIST}".m3u
   awk '{ { if ( $0 ~ /^#/ )
               print $0
            else
@@ -169,13 +152,9 @@ do
                      print "smb://neepies:${PASSWORD}@192.168.1.110/service/iTunes/Music"$0
                   else
                      print $0
-                }
-              }
-         }
-       }' ${TARGET}/"${ARTIST}".m3u  > /mnt/neep-nas/iTunes/playlist_and/Artists/"${ARTIST}".m3u
+       } }    } }' ${TARGET}/"${ARTIST}".m3u  > /mnt/neep-nas/iTunes/playlist_and/Artists/"${ARTIST}".m3u
 done< <(find "${SOURCE}"/ -type f -newer ${FLAGFILE} 2>/dev/null | grep -we mp3$ -we m4a$ 2>/dev/null | awk -F/ '{ print $7 }' | sort | uniq | fgrep -vf ${EXCLUDE})
 }
-
 
 #######################################################################################
 # Create directory with the last/latest 200 songs and the Latest200-Playlist.         #
@@ -224,7 +203,6 @@ do
 done< <(find ${SOURCE}/ -type d -newer ${FLAGFILE} 2>/dev/null | grep -vw Music/$ | awk '{ ("stat -c %X ""\""  $0 "\"" ) | getline date
                                                                                            print date":"$0
                                                                                          }' | awk -F/ 'NF>7 { print $0 }' | sort -nr | awk -F: 'NR<35 { print $2 }')
-
 awk '{ { if ( $0 ~ /^#/ )
            print $0
         else
@@ -233,10 +211,7 @@ awk '{ { if ( $0 ~ /^#/ )
                   print "/mnt/neep-nas/iTunes/Music"$0
                else
                   print $0
-             }
-           }
-       }
-     }' ${PLAYLIST_TARGET}/Latest-200.m3u > /mnt/neep-nas/iTunes/playlist_lnx/Latest-200.m3u
+     } }   } }' ${PLAYLIST_TARGET}/Latest-200.m3u > /mnt/neep-nas/iTunes/playlist_lnx/Latest-200.m3u
 awk '{ { if ( $0 ~ /^#/ )
             print $0
          else
@@ -245,10 +220,7 @@ awk '{ { if ( $0 ~ /^#/ )
                    print "smb://neepies:${PASSWORD}@192.168.1.110/service/iTunes/Music"$0
                 else
                    print $0
-              }
-            }
-       }
-     }' ${PLAYLIST_TARGET}/Latest-200.m3u > /mnt/neep-nas/iTunes/playlist_and/Latest-200.m3u
+     } }    } }' ${PLAYLIST_TARGET}/Latest-200.m3u > /mnt/neep-nas/iTunes/playlist_and/Latest-200.m3u
 # 
 # Now make sure to remain just 200-songs:
 #
@@ -266,7 +238,7 @@ then
     cd ${MUSIC_TARGET}
     find . -type f -newer ${FLAGFILE} \( -name "*.mp3" -o -name "*.m4a" \) | awk '{ { if ( $0 ~ /.mp3/ ) system("mp3gain -c -r ""\""  $0 "\"" ) }
                                                                                     { if ( $0 ~ /.m4a/ ) system("aacgain -c -r ""\""  $0 "\"" ) } }' 
-    cd -
+    cd - 1>/dev/null
     touch                 ${FLAGFILE}
 fi
 }
@@ -297,7 +269,7 @@ then
                                    { gsub( "::__::", "\n", $0 ) 
                                      print $0"\015" }'
     ) > 'Best Of The Best.m3u'
-    cd -
+    cd - 1>/dev/null
 fi
 }
 
@@ -309,7 +281,6 @@ for DIR in ${TARGET} ${PLAYLIST_TARGET} ${BEST_OF_TARGET}
 do
   unset NUM_I NUM_II PLAYLIST PLAYLISTS
   cd ${DIR};[[ $? -ne 0 || ! -d ${STICK}/${DIR} ]] && echo "Directory ${DIR} doesn't exist..." && break
-
   while read PLAYLIST
   do
     PLAYLISTS[${NUM_I}]="${PLAYLIST}" 
@@ -347,6 +318,23 @@ do
 done
 }
 
+#######################################################################################
+# Verify whether all songs are actually on the USB-stick.                             #
+#######################################################################################
+VerifySongsOnStick(){
+cd                  /mnt/neep-nas/iTunes/Music/Music
+[[ $? -ne 0 || ! -d /mnt/neep-nas/iTunes/Music/Music ]] && echo "NAS is not mounted..." && exit
+while read SONG
+do
+  if [[ ! -s "${SOURCE}/${SONG}" ]]
+  then
+      echo -e "       : ${SONG} doesn't exits on ${SOURCE}, copying it..."
+      mkdir -p           "${SOURCE}/$(dirname "${SONG}")"
+      cp    -f "${SONG}" "${SOURCE}/$(dirname "${SONG}")"
+  fi
+done < <(find . -type f  \( -name "*.mp3" -o -name "*.m4a" \) )
+}
+
 ################################## Main Script ########################################
 #-------------------------------------------------------------------------------------#
 #                                                                                     #
@@ -356,7 +344,7 @@ CreateArtistPlaylists
 CreateLatest200Directory
 CreateBestOfTheBest
 Copy2SDCard
-[[ "${NO_VERIFY:=false}" != true ]] && VerifyPlaylists
+[[ "${NO_VERIFY:=false}" != true ]] && VerifyPlaylists && VerifySongsOnStick
 #                                                                                     #
 #-------------------------------------------------------------------------------------#
 ################################## Main Script ########################################
