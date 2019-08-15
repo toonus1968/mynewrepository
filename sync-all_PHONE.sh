@@ -215,7 +215,7 @@ done < <(find . -type f  \( -name "*.mp3" -o -name "*.m4a" \) )
 #                                                                                     #
 InitSettings
 CreateBestOfTheBest
-CreateLatest200Directory
+#CreateLatest200Directory
 Copy2SDCard
 [[ "${NO_VERIFY:=false}" != true ]] && VerifyPlaylists && VerifySongsOnStick
 #                                                                                     #

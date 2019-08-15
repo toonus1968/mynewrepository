@@ -264,7 +264,8 @@ then
                                      -ve 'Best Of Smashing Pumpkins.m3u' \
                                      -ve 'Best Of Thom Yorke.m3u'        \
                                      -ve 'Best Of The Best.m3u'          \
-                                     -ve 'Best Of Warpaint.m3u' 
+                                     -ve 'Best Of Warpaint.m3u'          \
+                                     -ve 'Best Of Wolf Alice.m3u' 
               ) | shuf | awk 'BEGIN{ print "#EXTM3U\015" }
                                    { gsub( "::__::", "\n", $0 ) 
                                      print $0"\015" }'
