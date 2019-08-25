@@ -1,0 +1,194 @@
+#!/bin/bash
+
+SYSTEMS[0]=syst0
+SYSTEMS[1]=syst1
+#SYSTEMS[2]=syst2
+#SYSTEMS[3]=syst3
+#SYSTEMS[4]=syst4
+#SYSTEMS[5]=syst5
+#SYSTEMS[6]=syst6
+typeset -i NUM=0
+while [ ${NUM} -lt 51    ]
+do
+  eval $(echo ${NUM} |awk '{ print "SYSTEMS["$1"]=system"$1 }'  )
+  ((NUM+=1))
+done
+
+MAX=12
+MAX_PROC=30
+  OUTDIR=/tmp/.rem-exec/$(id -un)/$$ ; mkdir -p ${OUTDIR}
+ LOGFILE=/tmp/.rem-exec/$(id -un)/.$(basename $0).$$
+
+
+
+###############################################################################
+# Determine and set the status for the background process such as it ran.     #
+###############################################################################
+GetAndSetStatus(){
+#
+# Put the used file-descriptor back into the free file-descriptors pool, upon it is aviable for other background processes to be started in it:
+#
+FREE_DESCR[${USED_DESCR}]=${USED_DESCR}
+#
+# Since the background process is not operational anymore, remove it from the RUNNING-array:
+#
+unset RUNNING[${USED_DESCR}]
+#
+# Close the used file-descriptor and determine the status of the background process such as it ran in it:
+#
+           DESC_FILE=${OUTDIR}/.${USED_DESCR}_stdout-$(id -un)::${USED_SYS}
+if [ -f "${DESC_FILE}" ]
+then
+    eval exec "${USED_DESCR}<&-"
+    eval exec "${USED_DESCR}<${DESC_FILE}"
+    [[ "${QUIET:=false}" != "true" ]] && cat ${DESC_FILE}
+    eval $(awk -F: '$1 ~ /^'${USED_SYS}'$/ && $2 ~ /^[0-9]/ { RESULT=$2 }END{ print "RESULT="RESULT }' ${DESC_FILE} 2>/dev/null)
+    if [ ${RESULT:-99} -eq 0 ]
+    then
+        [[ "${QUIET:=false}" != "true" ]] && echo -e "\t     Successfully executed: \"${COMMAND}\" on: ${USED_SYS}"
+        ((SUCCEEDED+=1));SUCCEEDED_HOSTS="${SUCCEEDED_HOSTS} ${USED_SYS}"
+    else
+        [[ "${QUIET:=false}" != "true" ]] && echo -e "\t *** FAILED *** to execute: \"${COMMAND}\" on: ${USED_SYS}"
+        ((FAILED+=1))   ;FAILED_HOSTS="${FAILED_HOSTS}       ${USED_SYS}"
+    fi
+    awk '{ print "'${USED_SYS}':_:"$0 }' ${DESC_FILE} >> ${LOGFILE}
+else
+    [[     "${QUIET:=false}" != "true" ]] && echo -e "\t *** FAILED *** to execute: \"${COMMAND}\" on: ${USED_SYS}"
+    ((    FAILED+=1))   ;FAILED_HOSTS="${FAILED_HOSTS}       ${USED_SYS}"
+fi
+rm -f ${DESC_FILE} 2>/dev/null
+}
+
+
+###############################################################################
+# Manage the running and completed background processes.                      #
+###############################################################################
+MonitorBackGroundProcs(){  
+#
+# Have running background processes properly monitored (do not use the shell-builtin "wait" [it might wait to eternity... :-(]) for their activity:
+#
+for PROC in ${RUNNING[@]}
+do
+  eval $(echo  ${PROC} | awk -F: '{ print "PROC="$1,"USED_DESCR="$2,"STARTED="$3,"USED_SYS="$4 }') 
+  if [ $(ps -p ${PROC} 2>/dev/null | awk '$1 !~ /^PID$/ { print $0 }' | wc -l) -gt 0 ]
+  then
+      #
+      # In case of the background process is still running and longer than the ${MAX} number of seconds; have it killed:
+      #
+      if [ $(expr $(date +%s) - ${STARTED}) -gt ${MAX:=600} ]
+      then
+          [[ "${QUIET:=false}" != "true" ]] && echo -e "\n\tBackground process is running too long for system: ${USED_SYS} ${PROC} will be killed..." 
+          kill ${PROC} 2>/dev/null
+          GetAndSetStatus
+      fi
+  else
+      GetAndSetStatus
+  fi
+done
+if [[ "${QUIET:=false}" != "true" && ${#RUNNING[@]} -ne 0 ]]
+then
+    echo -e "\n\tBackground process(es) still running for:" 
+    echo ${RUNNING[@]} | awk '{ for (i=1;i<=NF;i++) { split( $i, array, ":" ); printf ("%-9s "),array[4] } }END{ print "" }' | fold -sw84 | awk '{ print "\t"$0 }'
+fi
+[ "${QUIET:=false}" != "true" ] && echo     -e "\t#Process(es) running: ${#RUNNING[@]} - #Free file-descriptor(s): ${#FREE_DESCR[@]}\n"
+}
+
+################################################################################
+# Setup to SSH-session and perform the remote-execution (as root: with sudo).  #
+################################################################################
+PerformRemoteExecute(){ 
+      PASSWORD=$1
+REMOTE_COMMAND=$2
+sleep $(echo $RANDOM |cut -c 1,2)
+return ${RC}
+}
+
+################################################################################
+# Get a free file-descriptor from descriptors pool.                            #
+################################################################################
+GetFreeDescriptor(){ 
+#
+# If a free file-descriptor is in the descriptors pool, use that 1 to start the background process in and remove it from the pool (since it is not free anymore):
+#
+         DESCRIPTOR=$(echo     ${FREE_DESCR[@]} 2>/dev/null | awk '{ print $1 }')
+[[ -n "${DESCRIPTOR}" ]] && unset FREE_DESCR[${DESCRIPTOR}]
+}
+
+
+################################################################################
+# Steering of launching remote-commands on available systems.                  #
+################################################################################
+LaunchRemoteCMDS(){  
+rm    -f ${OUTDIR}/.[0-9]*_stdout-$(id -un)::* 2>/dev/null
+
+typeset -i UNAVAILABLE=0 FAILED=0 SUCCEEDED=0 NUM=3
+#
+# Initiate the free file-descriptors pool:(the +3 is due to the fact the first 2 file-descriptors can not be used (stdout and stderr); will start from the 3rd descriptor):
+#
+while [ ${NUM} -lt $(expr ${MAX_PROC:-30} + 3) ]
+do
+  FREE_DESCR[${NUM}]=${NUM};((NUM+=1))
+done
+
+
+for  SYSTEM in ${SYSTEMS[@]}
+do
+  #
+  # Very first step is to obtain a free file-descriptor, or just wait for 1 to become available:
+  #
+  unset        DESCRIPTOR
+  while [ -z ${DESCRIPTOR} ]
+  do
+    GetFreeDescriptor
+    [[    -z ${DESCRIPTOR} ]] && MonitorBackGroundProcs 
+    [[    -z ${DESCRIPTOR} ]] && sleep 5
+  done
+  #
+  # Test whether ${SYSTEM}'s hostname can be resolved and if it is reachable over the network:
+  #
+  echo host ${SYSTEM} 1>/dev/null 2>&1
+  if [[ $? -ne 0 ]]  #tcping
+  then
+      ((UNAVAILABLE+=1));UNAVAILABLE_HOSTS="${UNAVAILABLE_HOSTS} ${SYSTEM}"
+      [[ "${QUIET:=false}" != "true" ]] && printf "\n\t%20s %-30s\n\n" ${SYSTEM}: "seems to be UNavailable..."
+  else
+      #
+      # Once detected the ${SYSTEM} is operational, have the he remote-execution (by root) carried out:
+      #
+      [[ "${QUIET:=false}" != "true" ]] && printf   "\t%20s %-30s\n"   ${SYSTEM}: "seems to be operational, let's go..."
+      eval exec "${DESCRIPTOR}>${OUTDIR}/.${DESCRIPTOR}_stdout-$(id -un)::${SYSTEM}"
+      ( PerformRemoteExecute ${PASSWORD:-none}  2>/dev/null
+        echo ${SYSTEM}:$?
+      ) 1>&${DESCRIPTOR} 2>/dev/null &
+      RUNNING[${DESCRIPTOR}]=$!:${DESCRIPTOR}:$(date +%s):${SYSTEM}
+  fi
+done
+#
+# Wait for all background remote-cmd processes to complete:
+#
+while [ ${#RUNNING[@]} -ne 0 ]
+do
+  MonitorBackGroundProcs ; sleep 5
+done
+
+
+#
+# Have the grand-totals regarding the run displayed:
+#
+( echo
+  echo ${UNAVAILABLE_HOSTS} | fold -sw120 | awk '{ sub(/^[ ]+/, "" ); print "UNAVAILABLE_HOSTS="$0 }' 
+  echo   ${SUCCEEDED_HOSTS} | fold -sw120 | awk '{ sub(/^[ ]+/, "" ); print "  SUCCEEDED_HOSTS="$0 }' 
+  echo      ${FAILED_HOSTS} | fold -sw120 | awk '{ sub(/^[ ]+/, "" ); print "     FAILED_HOSTS="$0 }' 
+  echo
+) >>       ${LOGFILE}
+( echo -e "\n\t    Total amount of systems unavailable: ${UNAVAILABLE:=0}"
+  echo -e   "\tRemote commands - successfully executed: ${SUCCEEDED:=0}"
+  echo -e   "\t                      failed to execute: ${FAILED:=0}"
+  echo -e   "\t---------------------------------------:----------"
+  echo -e   "\t                                       : $(echo ${UNAVAILABLE} ${SUCCEEDED} ${FAILED} | awk '{ print $1+$2+$3 }')\n" 
+) | tee -a ${LOGFILE}
+  echo -e "\n\n\t(For details regarding this session, check: ${LOGFILE})\n"
+}
+
+
+LaunchRemoteCMDS
