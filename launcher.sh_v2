@@ -1,0 +1,615 @@
+#!/bin/bash
+# @(#) Remote (specific systems) exec (as root) script  - V2.0.2 - Aug 7th 2019
+###############################################################################
+#                                                                             #
+# Name of script:     launcher.sh                                             #
+# Author:             Anthony Paardekooper (KSC) - Technical Unix/Linux       #
+# Status:             Operational (after thoroughly being tested!!!).         #
+# Version:            2.0.2                                                   #
+# Date written:       Thursday, May 23rd 2019                                 #
+# Date last modified:                                                         #
+#          Anthony (Aug 7th 2019):                                            #
+#          Accept the "no_password" as a password; meaning no password is     #
+#          required for the usage of sudo (=SUDO-rule required!!!) and the    #
+#          ssh-connections (=SSH-keys should be distributed!!!).              #
+#          Added the -n[1|150] input variable; which is used to customize the #
+#          maximum number of running back-ground (systems) processes. The     #
+#          value should be between 1 and 150. When it is not specified, the   #
+#          default number of 30 (such as set in ${MAX_PROC}) will be used.    #
+#          In that case, batches of 30 systems (simultaneously running        #
+#          processes) will be used, until all systems are processed.          #
+#          Modified the test to establisch whether a system is operation;     #
+#          replaced using ping by tcping.                                     #
+#                                                                             #
+# Purpose: Shell-script to execute commands (as root: by using sudo) on       #
+#          specified/provided systems. Therefore sudo-access for the user/    #
+#          operator on the "remote system(s)" is required.                    #
+#          The script runs every time "a batch" of ${MAX_PROC} remote         #
+#          execution-commands; in just as much batches until all systems are  #
+#          processed.                                                         #
+#          Each remote execution-command (ssh with sudo) is started in the    #
+#          background in a "dedicated file-descriptor". It's not allowed to   #
+#          run any longer than 10 minutes (unless specified otherwise by the  #
+#          "-m <max seconds>"); after that it will be killed if it is still   # 
+#          running.                                                           #
+#          In case of the -L option was specified (=<use-local-copy>), the    #
+#          specified script (-x "<command to execute>"), the local-version    #
+#          of the script is copied to the remote-system (into the directory:  #
+#          /tmp/$(id -un)/$$/). That 1 will actually be called. So it is      #
+#          actually not required that the script exists "remotely".           #
+#                                                                             #
+#          In case of the -L option (=<use-local-copy>), the script is copied #
+#          into /tmp/.<user-name>/$$/<script-name> to maintain its basename.  #
+#          Built in the recognition of the -D input parameter: in that case   #
+#          NO sudo will be issued. The specified command/script will just be  #
+#          launched as the user which called this script.                     #
+#                                                                             #
+# *************************************************************************** #
+# *** Please Note: the script CAN be called with the operators password!  *** #
+# *** Be careful! Provide the correct password... otherwise the operator  *** #
+# *** can/will be locked...  :-(                                          *** #
+# *************************************************************************** #
+#                                                                             #
+# Usage: From the command-line (not as root!) with a set of required and      #
+#        optional input parameters passed on the script.                      #
+#         ./launcher.sh                                                       #
+#           -x "<command to execute>"                          |==> Required  #
+#              Command/script must be specified between double quotes!        #
+#           -A or -t <PLANNED|OPERATION> or -s <system>        |==> Required  #
+#              Systems must be specified between double quotes!               #
+#           -e [environment]                                   |==> Optional  #
+#           -m [max seconds]                                   |==> Optional  #
+#           -n [max processes]                                 |==> Optional  #
+#           -p [password]         **not allowed as root!**     |==> Optional  #
+#              *** Be careful with the option since the password will be ***  #
+#              *** visible in plain text in the systems process-list!!!  ***  #
+#              When the password: "no_password" was passed on the script,     #
+#              no password should be required for both ssh-conenction and     #
+#              the sudo-usage.                                                #
+#           -D [do-not-use-sudo]  **not allowed as root!**     |==> Optional  #
+#           -L [use-local-copy]                                |==> Optional  #
+#           -N [no-confirmations-asked]                        |==> Optional  #
+#           -Q [quiet mode]                                    |==> Optional  #
+#                                                                             #
+#        For example:                                                         #
+#         ./launcher.sh                                            \          #
+#            -x "uptime;/tech/local/sbin/ignore-NW_down.sh --on"   \          #
+#            -s "$(cat /tmp/system-list)"                          \          #
+#            -p MyPass01!                                          \          #
+#            -m 60                                                 \          #
+#            -n 45                                                 \          #
+#            -N                                                    \          #
+#            -Q                                                               #
+#                                                                             #
+#        By launching the script such as displayed in the example above, the  #
+#        following will happen/occur:                                         #
+#        Both, the command "uptime" and the script/command                    #
+#          ==> /tech/local/sbin/ignore-NW_down.sh --on            [-x option] #
+#        will be executed (as root!), on the systems (once they were tested   #
+#        to be available) such as specified in the file:                      #
+#          ==> /tmp/system-list                                   [-s option] #
+#        (System can also be specified directly: -s "sys1 sys2 sys3"          #
+#        The operator won't be prompted for his password, since it was al-    #
+#        ready provided:                                                      #
+#          ==> MyPass01!                                          [-p option] #
+#        All (back-ground) processes may not take longer to complete than:    #
+#          ==> 60 seconds                                         [-m option] #
+#        No more than a maximum of given (back-ground) processes will be      #
+#        operational at the same time:                                        #
+#          ==> 45 back-ground processes                           [-n option] #
+#        The operator won't be prompted to select/acknowledge the system(s)   #
+#        on which the remote command(s)/script(s) will be launched.           #
+#                                                                 [-N option] #
+#        Detailed output is not displayed.                        [-Q option] #
+#                                                                             #
+###############################################################################
+# Define the needed/required variables.                                       #
+###############################################################################
+InitSettings(){
+MAX_PROC=30
+  OUTDIR=/tmp/.rem-exec/$(id -un)/$$ ; mkdir -p ${OUTDIR}
+ LOGFILE=/tmp/.rem-exec/$(id -un)/.$(basename $0).$$
+ SSHPASS=/usr/bin/sshpass
+}
+
+###############################################################################
+# Display an error-message in case of wrong input-variables.                  #
+###############################################################################
+DisplayErrorAndExit(){
+if [ "${I_AM_ROOT}" != "true" ]
+then
+    echo -e "\n\t$(tput rev)**ERROR**$(tput sgr0) usage: $(basename $0)\n\t\t\t -x \"<command to execute>\"\n\t\t\t -A   (PLANNED and OPERATION) | -t <PLANNED|OPERATION> | -e <AE|AVE|DE|EE|LE|UTE|SE|TE|ITE> | -s \"<system> ...\"\n\t\t       [ -m <max seconds> ]\n\t\t       [ -n <max processes> ]\n\t\t       [ -p <password> ]\n\t\t       [ -D ] (Do NOT use sudo)\n\t\t       [ -L ] (use Local copy)\n\t\t       [ -N ] (No confirmations asked)\n\t\t       [ -Q ] (Quiet mode)\n\n"
+else
+    echo -e "\n\t$(tput rev)**ERROR**$(tput sgr0) usage: $(basename $0)\n\t\t\t -x \"<command to execute>\"\n\t\t\t -A  (PLANNED and OPERATION) | -t <PLANNED|OPERATION> | -e <AE|AVE|DE|EE|LE|UTE|SE|TE|ITE> | -s \"<system> ...\"\n\t\t       [ -m <max seconds> ]\n\t\t        [ -n <max processes> ]\n\t\t       [ -D ] (Do NOT use sudo)\n\t\t       [ -L ] (use Local copy)\n\t\t[ -N ] (No confirmations asked)\n\t\t       [ -Q ] (Quiet mode)\n\n"
+fi
+CleanUpAndExit
+}
+
+###############################################################################
+# Make sure things are visible again and no passwords kept in shell-history.  #
+###############################################################################
+CleanUpAndExit(){
+rm -rf /tmp/.rem-exec/$(id -un)/$$ 
+find   /tmp/.rem-exec/$(id -un) -type f -name ".$(basename $0).[0-9]*" -mtime +10 2>/dev/null | xargs rm -f 
+rm -f ~/.kl[0-9]*.$$-auth_s_kl[0-9]*
+#
+# Have the password removed from the shell-history:
+#
+if [[ "${I_AM_ROOT}" != "true" && -n "${PASSWORD}" && $(grep -w $(basename $0) ~/.bash_history 2>/dev/null | grep -w "${PASSWORD}" 2>/dev/null | wc -l) -ne 0 ]]
+then
+    sed -i -e 's/-p'${PASSWORD}'/-pXXXXXXX/g' -e 's/-p '${PASSWORD}'/-p XXXXXXX/g' ~/.bash_history 2>/dev/null
+fi
+stty echo;echo -e "\n";exit 99
+}
+
+###############################################################################
+# Wait for the background processes to complete.                              #
+###############################################################################
+WaitToComplete(){
+#
+# Have running background processes monitored (do not use the shell-builtin "wait" [it might wait to eternity... :-(]) for their activity:
+#
+sleep 1;SECONDS=0
+while [[ $(echo ${RUNNING[@]:-none} | awk '{ for (i=1;i<=NF;i++) print " -p "$i }' | xargs ps 2>/dev/null | awk '$1 !~ /^PID$/ { print $0 }' | wc -l) -gt 0 && ${SECONDS} -le ${MAX:=600} ]]
+do
+  if [ "${QUIET:=false}" != "true" ]
+  then
+      echo -e "\n\tWaiting for background process(es) to complete:"
+      echo      ${RUNNING[@]:-none} | awk '{ for (i=1;i<=NF;i++) print " -p "$i }' | xargs ps 2>/dev/null | awk '$1 !~ /^PID$/ { i++;printf ("%09d ",$1 ) }
+                                                                                                                  END{ print "\n(#Running: "i")" }' | fold -sw75 | awk '{ print "\t"$0 }'
+  fi
+  sleep 5   
+done
+if [ $(echo     ${RUNNING[@]:-none} | awk '{ for (i=1;i<=NF;i++) print " -p "$i }' | xargs ps 2>/dev/null | awk '$1 !~ /^PID$/ { print $0 }' | wc -l) -gt 0 ]
+then
+    [ "${QUIET:=false}" != "true" ] && echo -e "\tBackground process(es) to be killed:"
+    echo        ${RUNNING[@]:-none} | awk '{ for (i=1;i<=NF;i++) print " -p "$i }' | xargs ps 2>/dev/null | awk '$1 !~ /^PID$/ { print "\t: "$1 ; system("kill "$1" 2>/dev/null") }'
+fi
+}
+
+################################################################################
+# Ask for the user-password, without having it displayed it on the screen.     #
+################################################################################
+AskForUserPassword(){
+while [[ "${PASS_I:=unknown_I}" != "${PASS_II:=unknown_II}" ]]
+do
+  echo -e "\n\tPlease enter password for $(id -un): \c";stty -echo; read PASS_I ;stty echo ;echo
+  echo -e "\n\tEnter the new password again: \c"       ;stty -echo; read PASS_II;stty echo ;echo
+  if [[ "${PASS_I:=unknown_I}" != "${PASS_II:=unknown_II}" ]]
+  then
+      clear;echo -e "\n\tThe password entries do not match or they're empty, please try again."
+  else
+      export PASSWORD="${PASS_I}"
+  fi
+done
+}
+
+################################################################################
+# Get all known systems by type (PLANNED|IN OPERATION) if none specified.      #
+################################################################################
+GetAllKnownSystems(){ 
+#
+# Get all known Linux systems from the CMDB if no systems were specified:
+#
+if [[ -n "${TYPE}" || -n "${ENV}" ]]
+then
+    eval $(\
+    ( echo "SELECT DISTINCT hostname,updatedate,env,function,description from assets WHERE os        != 'vmware'    and
+                                                                                           os  NOT LIKE 'VMWARE%'   and
+                                                                                           os  NOT LIKE 'Windows%'  and
+                                                                                           osversion != 'Appliance' and
+                                                                                           os        != 'AIX'       and
+                                                                                           os        != 'suse' ORDER BY hostname ASC" \
+      | /usr/bin/mysql --skip-column-names -ubdmc -pk1mp0c CMDB2 
+    ) | awk -F"\t" '{ if ( $3 ~ /\// )
+                          split( $3, env, "/" )
+                       else
+                          env[2]=$3
+                     }
+                     #
+                     # -1 Known systems which are not added correctly to the CMDB:
+                     # -2 Exclude ESX systems:
+                     # -3 Get only those hosts for which the hostname starts with kl:
+                     # -4 If applicable: get the specified environment AE|AVE|DE|EE|LE|UTE|SE|TE|ITE:
+                     # -5 If applicable: get the specified type: PLANNED|OPERATION or both:
+                     #
+                     $1          !~ /^kl13322d$/                && \
+                     $1          !~ /^kl122a91$/                && \
+                     $1          !~ /^kl122a80$/                && \
+                     $1          !~ /^kl143com$/                && \
+                     tolower($5) !~ /vmware esx server/         && \
+                     $1           ~ /^kl/                       && \
+                     env[2]       ~ /'${ENV:-E}'$/              && \
+                   ( $4           ~ /'${TYPE[0]:-[A-Z][A-Z]}'$/ || $4 ~ /'${TYPE[1]:-do_not_use}'$/ ) { print $1                    }' 2>/dev/null | sort -nr | uniq \
+      | awk                                                            'BEGIN{ i=0 }                  { print "SYSTEMS["i"]="$1;i++ }')
+else
+    eval $(echo ${SPECIFIED} | tr "[,| ]" "\n" | sort -nr | uniq | awk 'BEGIN{ i=0 } $1 ~ /^kl/       { print "SYSTEMS["i"]="$1;i++ }' 2>/dev/null)
+fi
+}
+
+################################################################################
+# Columns in selection screen.                                                 #
+################################################################################
+DefineColumnsInSystemsScreen(){
+USENUM=$1
+awk 'BEGIN{ columns=1;usenum='${USENUM}' } { for ( i=0;i<NF ;i++ ) { j=i+1
+                                               { if ( usenum == 1 )
+                                                    printf ("%04d:%-19s"),i,$j
+                                                 else
+                                                    printf ("%-23s")       ,$j
+                                               }
+                                               { if ( columns == '${COLUMNS}'-1 )
+                                                    { columns=1;print "" }
+                                                 else
+                                                      columns++
+                                               }
+                                             } }' | awk '{ sub(/^[ ]+/, ""); print "\t"$0 }END{ print "\n" }'
+}
+
+################################################################################
+# Get a specific system(s) from the ${SYSTEMS[@]} array.                       #
+################################################################################
+GetSpecificSystem(){
+while [ "${BREAK:=false}" != "true"  ]
+do
+  clear
+  echo -e "\n\t$(tput rev)Available system(s):$(tput sgr0)\n"
+  COLUMNS=$(eval expr $(tput cols) / 23)
+  echo ${SYSTEMS[@]}  | DefineColumnsInSystemsScreen 1
+  echo -e   "\t$(tput rev) Selected system(s):$(tput sgr0)\n"
+  echo ${SELECTED[@]} | DefineColumnsInSystemsScreen 0
+  echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________" | fold  -w$(expr $(tput cols) - 9  2>/dev/null) | awk '{ print "\t"$0;exit }'
+  echo -e "\t$(tput smul)Select$(tput rmul) a system by typing its number:"
+  echo -e "\t\t\t(Or for $(tput smul)all systems$(tput rmul)):   @"
+  echo -e "\t\t\t\t $(tput smul)Acknowlegde$(tput rmul): [a|A]"
+  echo -e "\t\t\t\t        $(tput smul)Quit$(tput rmul): [q|Q]"
+  echo -e "\t\t\t\t       $(tput smul)Reset$(tput rmul): [r|R]"
+  echo -e "\t\t\t     $(tput rev)Your choice ==>:$(tput sgr0)   \c"
+  read   SELECTED_SYSTEM
+         SELECTED_SYSTEM=$(echo ${SELECTED_SYSTEM} | awk '{ { while( $1 ~ /^0/ && length($1) > 1 ) gsub( "^0", "", $1 ) } print $1 }')
+  case ${SELECTED_SYSTEM} in
+      [0-9]|\
+      [0-9][0-9]|\
+      [0-9][0-9][0-9]|\
+      [0-9][0-9][0-9][0-9]) if [[ ${SELECTED_SYSTEM} -le ${#SYSTEMS[@]} && "${SYSTEMS[${SELECTED_SYSTEM}]}" !=  "........" ]]
+                            then
+                                declare -a SELECTED=(${SELECTED[@]} ${SYSTEMS[${SELECTED_SYSTEM}]})
+                                eval                                  SYSTEMS[${SELECTED_SYSTEM}]="........"
+                            fi                                              ;;
+                       a|A) unset SYSTEMS;BREAK=true
+                            SYSTEMS="${SELECTED[@]}"                        ;;
+                       p|P) echo -e "\n"
+                            for TEMP_SYS in ${SELECTED[@]}
+                            do
+                              awk -F"\t" '$1 ~ /^'${TEMP_SYS}'$/ { print $0 }' ${CMDB} | sort | uniq
+                            done
+                            echo -e "\n\tHit <ENTER> to continue..."
+                            read dummy                                      ;;
+                       q|Q) echo -e "\n\n\t\tExiting...\n\n";CleanUpAndExit ;;
+                       r|R) unset SELECTED
+                            GetAllKnownSystems                              ;;
+                         @) GetAllKnownSystems
+                            declare -a SELECTED=(${SYSTEMS[@]})
+                            typeset -i NUM=0
+                            while [  ${NUM} -lt ${#SYSTEMS[@]} ]
+                            do
+                              eval SYSTEMS[${NUM}]="........"
+                              ((NUM+=1))
+                            done                                            ;;
+                         *) unset SELECTED_SYSTEM                           ;;
+  esac
+done
+clear;unset SELECTED BREAK
+}
+
+################################################################################
+# Setup to SSH-session and perform the remote-execution (as root: with sudo).  #
+################################################################################
+PerformRemoteExecute(){ 
+      PASSWORD=$1
+REMOTE_COMMAND=$2
+#
+# For/on the specified (and valid) system, carry out the specified command (as root: by using sudo), in case of ${USE_LOCAL_COPY} was set to true
+# the local script will be copied over to /tmp on the remote-system and that one will then be executed:
+#
+if [[ -z "${REMOTE_COMMAND}" && ${USE_LOCAL_COPY:-false} = true ]]
+then
+    TARGET=/tmp/.$(id -un)/$$/$(basename $(echo ${COMMAND} | awk '{ print $1 }'))
+    ${SSHPASS} -p ${PASSWORD} ssh -qto ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=no -l $(id -un) ${SYSTEM} "mkdir -p                  $(dirname ${TARGET})"
+    ${SSHPASS} -p ${PASSWORD} scp -qpo ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=no $(echo ${COMMAND} | awk '{ print $1 }') $(id -un)@${SYSTEM}:${TARGET}
+    ${SSHPASS} -p ${PASSWORD} ssh -qto ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=no -l $(id -un) ${SYSTEM} "chmod u+x                           ${TARGET}"
+    REMOTE_COMMAND="${TARGET} $(echo ${COMMAND} | awk '{ $1=""; print $0 }')"
+fi
+if [ "${DO_NOT_SUDO:=false}" = "true" ]
+then
+    if [ "${I_AM_ROOT}" != "true" ]
+    then
+        ${SSHPASS} -p ${PASSWORD} ssh -qto ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=no -l $(id -un) ${SYSTEM}  "${REMOTE_COMMAND:-${COMMAND}}"   ; RC=$?
+    else
+        su - sftuser -c          "ssh -qTo ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=no -l sftuser   ${SYSTEM} \"${REMOTE_COMMAND:-${COMMAND}}\"" ; RC=$?
+    fi
+else
+    #
+    # If the user does has the right SUDO-rules set/attached to it, and when literally "no_password" was passed on to the script, then go into the routine for where
+    # no password is used for the sudo-command:
+    #
+    if [ "${PASSWORD:-none}" != "no_password" ]
+    then
+        #
+        # There is no other way to get around the issue the given password is vissible in the systems process-list than storing it in a temp file and having the file removed,
+        # locally and remote, right after it was copied/used (=validated by sudo -Si ):
+        #
+        echo "${PASSWORD}" > ~/.${SYSTEM}.$$-auth_s_${SYSTEM}
+        chmod 600            ~/.${SYSTEM}.$$-auth_s_${SYSTEM}
+        ${SSHPASS} -p ${PASSWORD} scp -qpo  ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                                        -o  BatchMode=no ~/.${SYSTEM}.$$-auth_s_${SYSTEM} $(id -un)@${SYSTEM}:.${SYSTEM}.$$-auth_t_${SYSTEM}
+        rm   -f              ~/.${SYSTEM}.$$-auth_s_${SYSTEM}
+        ${SSHPASS} -p ${PASSWORD} ssh -qtto ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                                         -o BatchMode=no -l                               $(id -un) ${SYSTEM} "\
+        sudo -Si <           ~/.${SYSTEM}.$$-auth_t_${SYSTEM} 2>/dev/null
+        rm   -f              ~/.${SYSTEM}.$$-auth_t_${SYSTEM} 
+        sudo -ni ${REMOTE_COMMAND:-${COMMAND}}
+        "
+        RC=$?
+    else
+        #
+        # The ${SSHPASS} -p no_password is just to prevent hanging sessions; but for systems on which the SSH-keys are distributed the it is not required:
+        #
+        ${SSHPASS} -p no_password ssh -qtto ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=no -l $(id -un) ${SYSTEM} \
+        "sudo -n ${REMOTE_COMMAND:-${COMMAND}}"
+        RC=$?
+    fi
+fi
+return ${RC}
+}
+
+################################################################################
+# Steering of launching remote-commands on available systems.                  #
+################################################################################
+LaunchRemoteCMDS(){ 
+rm    -f ${OUTDIR}/.[0-9]*_stdout-$(id -un)::* 2>/dev/null
+#
+# Create batches of ${MAX_PROC} simultaneously running processes:
+#
+eval $(echo ${SYSTEMS} | awk 'BEGIN{ batch=0;i=0;j=1;max='${MAX_PROC}' }{ { for ( i=1 ; i<=NF ; i++ j++ ) 
+                                                                             { print "SYSTEM_BATCH_"batch"["j"]="$i
+                                                                               #
+                                                                               # If the division provides an integer (30, 60, 90, 120, 150...), start a new batch:
+                                                                               #
+                                                                               { if ( i/max !~ /\.[0-9]/ ) { batch++;j=0 } }
+                                                                             } 
+                                                                         } }
+                                                                         { print "ALL_BATCHES="batch }')
+#
+# Test whether the provided password is correct and if the user is capable to logon by using ssh and does have Sudo-access on the 1st specified system:
+#
+SYSTEM=${SYSTEM_BATCH_0[1]}
+PerformRemoteExecute ${PASSWORD:-none} "/usr/bin/id -un" 1>/dev/null 2>&1
+if [ $? -eq 0 ]
+then
+    echo                                   -e "\n\t  [ok]     Verified the provided password is correct to logon to: ${SYSTEM}"
+    [ "${DO_NOT_SUDO}" = "false" ] && echo -e   "\t  [ok]                       and that you do have sudo-access on: ${SYSTEM}"
+    if [ "${QUIET:=false}" = "true" ]
+    then
+        echo                               -e "\n\t [info]    $(basename $0) is running in "quiet mode", as such not much will be displayed."
+        echo                               -e   "\t           Please be patient when $(basename $0) is running...\n"
+    else
+        echo                               -e   "\t  [ok]     \tProceeding...\n"
+    fi
+    sleep 1
+else
+    echo                                   -e "\n\t[*ERROR*]  Established that either the provided password is incorrect on: ${SYSTEM}"
+    [ "${DO_NOT_SUDO}" = "false" ] && echo -e   "\t[*ERROR*]                               or you don't have sudo-access on: ${SYSTEM}"
+    echo                                   -e   "\t[*ERROR*]  \tExiting...\n"
+    CleanUpAndExit
+fi
+unset SYSTEM
+typeset -i UNAVAILABLE=0 FAILED=0 SUCCEEDED=0 PROCESSED=0
+while [ ${PROCESSED} -le ${ALL_BATCHES} ]
+do
+  unset USED;typeset -i DESCRIPTOR=3
+  eval SYSTEMS="$(echo \${SYSTEM_BATCH_${PROCESSED}[@]})"
+  for  SYSTEM in ${SYSTEMS}
+  do
+    #
+    # Test whether ${SYSTEM}'s hostname can be resolved and if it is reachable over the network:
+    #
+    host ${SYSTEM} 1>/dev/null 2>&1
+    if [[ $? -ne 0 || $(/usr/local/bin/tcping -qt1 -u1 ${SYSTEM} 22 1>/dev/null 2>&1;echo $?) -ne 0 ]]
+    then
+        ((UNAVAILABLE+=1));UNAVAILABLE_HOSTS="${UNAVAILABLE_HOSTS} ${SYSTEM}"
+        [ "${QUIET:=false}" != "true" ] && printf "\n\t%20s %-30s\n\n" ${SYSTEM}: "seems to be UNavailable..."
+    else
+        #
+        # Once detected the ${SYSTEM} is operational, have the he remote-execution (by root) carried out:
+        #
+        [ "${QUIET:=false}" != "true" ] && printf   "\t%20s %-30s\n"   ${SYSTEM}: "seems to be operational, let's go..."
+        USED[${DESCRIPTOR}]=${DESCRIPTOR}
+        eval exec "${DESCRIPTOR}>${OUTDIR}/.${DESCRIPTOR}_stdout-$(id -un)::${SYSTEM}"
+        ( PerformRemoteExecute ${PASSWORD:-none} 
+          echo ${SYSTEM}:$?
+        ) 1>&${DESCRIPTOR} 2>/dev/null &
+        RUNNING[${DESCRIPTOR}]=$!
+    fi
+    ((DESCRIPTOR+=1))
+    #
+    # Just wait after every "batch" of ${MAX_PROC} systems, before launching another ${MAX_PROC} (the +3 is due to the fact that the first 2
+    # file-descriptors can not be used (stdout and stderr); will start from the 3rd descriptor):
+    #
+    if [ ${DESCRIPTOR} -eq $(expr ${MAX_PROC:-30} + 3) ]
+    then 
+        [ "${QUIET:=false}" != "true" ] && echo -e "\n\t [info]    Reached end-of-batch (number: $(expr ${PROCESSED} + 1) of $(expr ${ALL_BATCHES} + 1) batches)"
+        WaitToComplete;unset RUNNING 
+    fi
+  done
+  #
+  # Wait for all background remote-cmd processes to complete:
+  #
+  WaitToComplete
+  #
+  # Determine the status of all background processes by getting/reading from its dedicated file-descriptor:
+  #
+  for DESCRIPTOR in ${USED[@]}
+  do
+    DESCRIPTOR_FILE=$(ls -1t ${OUTDIR}/.${DESCRIPTOR}_stdout-$(id -un)::* 2>/dev/null | head -1)
+    if [ -f "${DESCRIPTOR_FILE}" ]
+    then
+        eval exec "${DESCRIPTOR}<&-"
+        eval exec "${DESCRIPTOR}<${DESCRIPTOR_FILE}"
+        [ "${QUIET:=false}" != "true" ] && cat ${DESCRIPTOR_FILE}
+        USE_SYSTEM=$(echo ${DESCRIPTOR_FILE} | awk -F:: '{ print $2 }')
+        eval $(awk -F: '$1 ~ /^'${USE_SYSTEM}'$/ && $2 ~ /^[0-9]/ {           SYSTEM=$1;      RESULT=$2      }
+                                                                  END{ print "SYSTEM="SYSTEM,"RESULT="RESULT }' ${DESCRIPTOR_FILE} 2>/dev/null)
+        if [ ${RESULT:-99} -eq 0 ]
+        then
+            [ "${QUIET:=false}" != "true" ] && echo -e "\t     Successfully executed: \"${COMMAND}\" on: ${SYSTEM}"
+            ((SUCCEEDED+=1));SUCCEEDED_HOSTS="${SUCCEEDED_HOSTS} ${USE_SYSTEM}"
+        else
+            [ "${QUIET:=false}" != "true" ] && echo -e "\t *** FAILED *** to execute: \"${COMMAND}\" on: ${SYSTEM}"
+            ((FAILED+=1))   ;FAILED_HOSTS="${FAILED_HOSTS}       ${USE_SYSTEM}"
+        fi
+        awk '{ print "'${USE_SYSTEM}':_:"$0 }' ${DESCRIPTOR_FILE} >> ${LOGFILE}
+    else
+        [ "${QUIET:=false}" != "true" ] &&     echo -e "\t *** FAILED *** to execute: \"${COMMAND}\" on: ${SYSTEM}"
+        ((    FAILED+=1))   ;FAILED_HOSTS="${FAILED_HOSTS}       ${USE_SYSTEM}"
+    fi
+    rm -f ${DESCRIPTOR_FILE} 2>/dev/null
+  done
+  ((PROCESSED+=1))
+done
+#
+# Have the grand-totals regarding the run displayed:
+#
+( echo
+  echo ${UNAVAILABLE_HOSTS} | fold -sw120 | awk '{ sub(/^[ ]+/, "" ); print "UNAVAILABLE_HOSTS="$0 }' 
+  echo   ${SUCCEEDED_HOSTS} | fold -sw120 | awk '{ sub(/^[ ]+/, "" ); print "  SUCCEEDED_HOSTS="$0 }' 
+  echo      ${FAILED_HOSTS} | fold -sw120 | awk '{ sub(/^[ ]+/, "" ); print "     FAILED_HOSTS="$0 }' 
+  echo
+) >>       ${LOGFILE}
+( echo -e "\n\t    Total amount of systems unavailable: ${UNAVAILABLE:=0}"
+  echo -e   "\tRemote commands - successfully executed: ${SUCCEEDED:=0}"
+  echo -e   "\t                      failed to execute: ${FAILED:=0}"
+  echo -e   "\t---------------------------------------:----------"
+  echo -e   "\t                                       : $(echo ${UNAVAILABLE} ${SUCCEEDED} ${FAILED} | awk '{ print $1+$2+$3 }')\n" 
+) | tee -a ${LOGFILE}
+  echo -e "\n\n\t(For details regarding this session, check: ${LOGFILE})\n"
+}
+
+############################## Main Script #####################################
+#______________________________________________________________________________#
+#                                                                              #
+trap 'CleanUpAndExit' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
+InitSettings
+#
+# Act accordingly when the user is logged on as root:
+#
+if [ $(id -un) = "root" ]
+then
+    while [ -z "${PROCEED}" ]
+    do
+      clear
+      echo -e "\n\n\t $(tput rev)**NOTE**$(tput sgr0) You're logged on as root ..."
+      echo -e     "\t          Therefore the user sftuser (without sudo!) will be used."
+      echo -e   "\n\t          Do you wish to proceed? [Y|N] ==>: \c"
+      read   PROCEED
+      case ${PROCEED} in
+         n|N)  CleanUpAndExit ;;
+         y|Y)  PROCEED=true   ;;
+           *)  unset PROCEED  ;;
+      esac
+    done
+    I_AM_ROOT=true  ; DO_NOT_SUDO=true
+else
+    I_AM_ROOT=false ; DO_NOT_SUDO=false
+fi
+while getopts :e:m:n:p:s:t:x:ADLNQ FLAG
+do
+  case ${FLAG} in
+     A) TYPE[0]=PLANNED ; TYPE[1]=OPERATION            ;;
+     e) case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
+           AE) ENV=AE                                  ;;
+          AVE) ENV=AVE                                 ;;
+           DE) ENV=DE                                  ;;
+           EE) ENV=EE                                  ;;
+           LE) ENV=LE                                  ;;
+          UTE) ENV=UTE                                 ;;
+           SE) ENV=SE                                  ;;
+           TE) ENV=TE                                  ;;
+          ITE) ENV=ITE                                 ;;
+            *) DisplayErrorAndExit                     ;;
+        esac
+        [[ -n "${SPECIFIED}" ]] && DisplayErrorAndExit ;;
+     m) if [ $(echo "${OPTARG}" | egrep ^[[:digit:]]+$ | wc -l) -eq 0 ]
+        then
+            DisplayErrorAndExit
+        else
+            MAX="${OPTARG}"
+        fi                                             ;;
+     n) if [[ $(echo "${OPTARG}" | egrep ^[[:digit:]]+$ | wc -l) -eq 0 || ${OPTARG} -eq 0 || ${OPTARG} -gt 150 ]]
+        then
+            DisplayErrorAndExit
+        else
+            MAX_PROC="${OPTARG}"
+        fi                                             ;;
+     p) if [ "${I_AM_ROOT}" != "true" ]
+        then
+            PASSWORD="${OPTARG}"
+        else
+            DisplayErrorAndExit
+        fi                                             ;;
+     s) SPECIFIED="${OPTARG}"
+        [[ -n "${TYPE}"      ]] && DisplayErrorAndExit
+        [[ -n "${ENV}"       ]] && DisplayErrorAndExit ;;
+     t) case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
+             PLANNED) TYPE=PLANNED                     ;;
+           OPERATION) TYPE=OPERATION                   ;;
+                   *) DisplayErrorAndExit              ;;
+        esac                                           ;;
+     x) COMMAND="${OPTARG}"                            ;;
+     D) if [ "${I_AM_ROOT}" != "true" ]
+        then
+            DO_NOT_SUDO=true
+        else
+            DisplayErrorAndExit
+        fi                                            
+        DO_NOT_SUDO=true                               ;;
+     L) USE_LOCAL_COPY=true                            ;;
+     N) CONFIRM=false                                  ;;
+     Q) QUIET=true                                     ;;
+     *) DisplayErrorAndExit                            ;;
+  esac
+done
+#
+# Only proceed when determined the right/required input parameters were passed on the script:
+#
+[[ -z "${COMMAND}" || ( -z "${ENV}" && -z "${TYPE}" && -z "${SPECIFIED}" ) ]] && DisplayErrorAndExit
+#
+# The input variable may(!) contain the user-password, otherwise the script will ask for it (without the password no "sudo su-" can be done...):
+#
+[[ "${I_AM_ROOT}" != "true" && -z "${PASSWORD}" ]] && AskForUserPassword
+#
+# Firstly have the password removed from the shell-history:
+#
+if [[ "${I_AM_ROOT}" != "true" && -n "${PASSWORD}" && $(grep -w $(basename $0) ~/.bash_history 2>/dev/null | grep -w "${PASSWORD}" 2>/dev/null | wc -l) -ne 0 ]]
+then
+    sed -i -e 's/-p'${PASSWORD}'/-pXXXXXXX/g' -e 's/-p '${PASSWORD}'/-p XXXXXXX/g' ~/.bash_history 2>/dev/null
+fi
+echo -e "\n$(date): $(basename $0) $@ \n" | awk '{ print "## "$0 }' > ${LOGFILE}
+GetAllKnownSystems
+#
+# Do not ask to confirm or select systems when the -N flag was passed on to the script:
+#
+if [ "${CONFIRM:=true}" = "true" ]
+then
+    GetSpecificSystem
+else
+    SYSTEMS="${SYSTEMS[@]}"
+fi
+#
+# When all conditions are met, go launch the command/script...:
+#
+[[ -n      "${SYSTEMS[@]}" ]] && LaunchRemoteCMDS
+CleanUpAndExit
+#______________________________________________________________________________#
+#                                                                              #
+############################# End Of Script ####################################
