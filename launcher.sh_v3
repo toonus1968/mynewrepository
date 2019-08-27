@@ -1,14 +1,14 @@
 #!/bin/bash
-# @(#) Remote (specific systems) exec (as root) script  - V2.0.2 - Aug 7th 2019
+# @(#) Remote (specific systems) exec (as root) script - V3.0.0 - Aug 26th 2019
 ###############################################################################
 #                                                                             #
 # Name of script:     launcher.sh                                             #
 # Author:             Anthony Paardekooper (KSC) - Technical Unix/Linux       #
 # Status:             Operational (after thoroughly being tested!!!).         #
-# Version:            2.0.2                                                   #
+# Version:            3.0.0                                                   #
 # Date written:       Thursday, May 23rd 2019                                 #
 # Date last modified:                                                         #
-#          Anthony (Aug 7th 2019):                                            #
+#          Anthony (2.0.2: Aug 7th 2019):                                     #
 #          Accept the "no_password" as a password; meaning no password is     #
 #          required for the usage of sudo (=SUDO-rule required!!!) and the    #
 #          ssh-connections (=SSH-keys should be distributed!!!).              #
@@ -18,8 +18,10 @@
 #          default number of 30 (such as set in ${MAX_PROC}) will be used.    #
 #          In that case, batches of 30 systems (simultaneously running        #
 #          processes) will be used, until all systems are processed.          #
-#          Modified the test to establisch whether a system is operation;     #
+#          Modified the test to establish whether a system is operational;    #
 #          replaced using ping by tcping.                                     #
+#          Anthony (3.0.0: Aug 26th 2019):                                    #
+#          ...                                                                #
 #                                                                             #
 # Purpose: Shell-script to execute commands (as root: by using sudo) on       #
 #          specified/provided systems. Therefore sudo-access for the user/    #
@@ -53,32 +55,45 @@
 # Usage: From the command-line (not as root!) with a set of required and      #
 #        optional input parameters passed on the script.                      #
 #         ./launcher.sh                                                       #
+#              +-----------------------------------------------+              #
 #           -x "<command to execute>"                          |==> Required  #
 #              Command/script must be specified between double quotes!        #
-#           -A or -t <PLANNED|OPERATION> or -s <system>        |==> Required  #
-#              Systems must be specified between double quotes!               #
-#           -e [environment]                                   |==> Optional  #
+#              +-----------------------------------------------+              #
+#           -A                                             -or-|              #
+#           -t <PLANNED|OPERATION>                         -or-|              #
+#           -s "<system>"                                  -or-|              #
+#              Systems must be specified between double quotes!|==> Required  #
+#           -e [environment]                               -or-|              #
+#           -f <file>                                          |              #
+#              filename containing systems                     |              #
+#              +-----------------------------------------------+              #
+#           -D [do-not-use-sudo]                           -or-|==> Required  #
+#           -S [do-use-sudo]      **not allowed as root!**     |              #
+#              +-----------------------------------------------+              #
 #           -m [max seconds]                                   |==> Optional  #
 #           -n [max processes]                                 |==> Optional  #
-#           -p [password]         **not allowed as root!**     |==> Optional  #
+#           -p <password>         **not allowed as root!**     |==> Optional  #
 #              *** Be careful with the option since the password will be ***  #
 #              *** visible in plain text in the systems process-list!!!  ***  #
 #              When the password: "no_password" was passed on the script,     #
-#              no password should be required for both ssh-conenction and     #
-#              the sudo-usage.                                                #
-#           -D [do-not-use-sudo]  **not allowed as root!**     |==> Optional  #
+#              no password should be required for both ssh-connection and     #
+#              the sudo-usage!                                                #
+#           -w [waiting seconds]                               |==> Optional  #
 #           -L [use-local-copy]                                |==> Optional  #
 #           -N [no-confirmations-asked]                        |==> Optional  #
 #           -Q [quiet mode]                                    |==> Optional  #
+#              +-----------------------------------------------+              #
 #                                                                             #
 #        For example:                                                         #
 #         ./launcher.sh                                            \          #
-#            -x "uptime;/tech/local/sbin/ignore-NW_down.sh --on"   \          #
-#            -s "$(cat /tmp/system-list)"                          \          #
+#            -x "/tech/local/sbin/ignore-NW_down.sh --on;update"   \          #
+#            -f /tmp/system-list                                   \          #
 #            -p MyPass01!                                          \          #
 #            -m 60                                                 \          #
 #            -n 45                                                 \          #
+#            -w 10                                                 \          #
 #            -N                                                    \          #
+#            -S                                                    \          #
 #            -Q                                                               #
 #                                                                             #
 #        By launching the script such as displayed in the example above, the  #
@@ -690,7 +705,7 @@ fi
                                                                                            END{ print "##LOCAL-SCRIPT:#################################################\n" 
                                                                                               }' $(echo ${COMMAND} | awk '{ print $1 }') >> ${LOGFILE}
 #
-# When all conditions are met, go launch the command/script...:
+# When all conditions are met, go launch the command/script (that is where it all happens...):
 #
 [[ -n      "${SYSTEMS[@]}" ]] && LaunchRemoteCMDS
 CleanUpAndExit
