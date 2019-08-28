@@ -1,5 +1,5 @@
 #!/bin/bash
-# @(#) Remote (specific systems) exec (as root) script - V3.0.0 - Aug 26th 2019
+# @(#) Remote (specific systems) exec (as root) script - V3.0.0 - Aug 28th 2019
 ###############################################################################
 #                                                                             #
 # Name of script:     launcher.sh                                             #
@@ -16,20 +16,41 @@
 #          maximum number of running back-ground (systems) processes. The     #
 #          value should be between 1 and 150. When it is not specified, the   #
 #          default number of 30 (such as set in ${MAX_PROC}) will be used.    #
-#          In that case, batches of 30 systems (simultaneously running        #
-#          processes) will be used, until all systems are processed.          #
+#          In that case, make sure no more than 30 systems will be systems    #
+#          running simultaneously running (until all systems are processed).  #
 #          Modified the test to establish whether a system is operational;    #
 #          replaced using ping by tcping.                                     #
-#          Anthony (3.0.0: Aug 26th 2019):                                    #
-#          ...                                                                #
+#          Anthony (3.0.0: Aug 28th 2019):                                    #
+#          - Changed the approach of processing the systems; not to be done   #
+#            batch-wise anymore. Now process as much as systems (${MAX_PROC}) #
+#            are allowed to be operational at the same time; as soon as a     #
+#            file-descriptor becomes available, start a new system/process in #
+#            it.                                                              #
+#          - Added the recognition of "ranges" in the screen in which systems #
+#            can be selected.                                                 #
+#          - Added the recognition of the input-paramters:                    #
+#            -w   : number of seconds to be waited before checking process(es)#
+#                   are still running.                                        #
+#            -D|S : either -D (do-not-use-sudo) or -S (do-use-sudo) must(!)   #
+#                   be specified.                                             #
+#            -f   : followed by the file-name containing the systems for      #
+#                   which commands/scripts have to be processed on.           #
+#          - When the user starts this script for the first time, a screen is #
+#            displayed with some warnings and instructions.                   #
+#          - In case of the -L option was specified (=<use-local-copy>), a    #
+#            copy of the local script will also be displayed in the log-file. #
 #                                                                             #
-# Purpose: Shell-script to execute commands (as root: by using sudo) on       #
-#          specified/provided systems. Therefore sudo-access for the user/    #
-#          operator on the "remote system(s)" is required.                    #
-#          The script runs every time "a batch" of ${MAX_PROC} remote         #
-#          execution-commands; in just as much batches until all systems are  #
-#          processed.                                                         #
-#          Each remote execution-command (ssh with sudo) is started in the    #
+# Purpose: Shell-script to execute commands (as root: by using sudo or just   #
+#          as the user itself; depending on the -D or -S input-parameter) on  #
+#          specified/provided systems. In case of -S (=do-use-sudo) sudo-     #
+#          access for the user/operator on the "remote system(s)" is required.#
+#          The script runs remote execution-commands on specified system(s);  #
+#          there will be ${MAX_PROC} (default 30 but can be op to max 150)    #
+#          processes/systems running at the same time. As soon as 1 is done,  #
+#          its result will be determined and a new will be started in order   #
+#          to have continiously ${MAX_PROC} processing running until all      #
+#          systems are processed.                                             #
+#          Each remote execution-command (ssh (with sudo)) is started in the  #
 #          background in a "dedicated file-descriptor". It's not allowed to   #
 #          run any longer than 10 minutes (unless specified otherwise by the  #
 #          "-m <max seconds>"); after that it will be killed if it is still   # 
@@ -39,12 +60,10 @@
 #          of the script is copied to the remote-system (into the directory:  #
 #          /tmp/$(id -un)/$$/). That 1 will actually be called. So it is      #
 #          actually not required that the script exists "remotely".           #
+#          The script is copied into /tmp/.<user-name>/$$/<script-name>       #
+#          to maintain its basename.                                          #
 #                                                                             #
-#          In case of the -L option (=<use-local-copy>), the script is copied #
-#          into /tmp/.<user-name>/$$/<script-name> to maintain its basename.  #
-#          Built in the recognition of the -D input parameter: in that case   #
-#          NO sudo will be issued. The specified command/script will just be  #
-#          launched as the user which called this script.                     #
+# START-LINE: DO NOT REMOVE ------------------------------------------------- #
 #                                                                             #
 # *************************************************************************** #
 # *** Please Note: the script CAN be called with the operators password!  *** #
@@ -65,7 +84,7 @@
 #              Systems must be specified between double quotes!|==> Required  #
 #           -e [environment]                               -or-|              #
 #           -f <file>                                          |              #
-#              filename containing systems                     |              #
+#              File containing the systems                     |              #
 #              +-----------------------------------------------+              #
 #           -D [do-not-use-sudo]                           -or-|==> Required  #
 #           -S [do-use-sudo]      **not allowed as root!**     |              #
@@ -86,42 +105,61 @@
 #                                                                             #
 #        For example:                                                         #
 #         ./launcher.sh                                            \          #
-#            -x "/tech/local/sbin/ignore-NW_down.sh --on;update"   \          #
+#            -x "/tech/local/sbin/ignore-NW_down.sh --on;uptime"   \          #
+#            -S                                                    \          #
 #            -f /tmp/system-list                                   \          #
 #            -p MyPass01!                                          \          #
 #            -m 60                                                 \          #
 #            -n 45                                                 \          #
 #            -w 10                                                 \          #
 #            -N                                                    \          #
-#            -S                                                    \          #
 #            -Q                                                               #
 #                                                                             #
-#        By launching the script such as displayed in the example above, the  #
-#        following will happen/occur:                                         #
-#        Both, the command "uptime" and the script/command                    #
-#          ==> /tech/local/sbin/ignore-NW_down.sh --on            [-x option] #
-#        will be executed (as root!), on the systems (once they were tested   #
-#        to be available) such as specified in the file:                      #
-#          ==> /tmp/system-list                                   [-s option] #
-#        (System can also be specified directly: -s "sys1 sys2 sys3"          #
-#        The operator won't be prompted for his password, since it was al-    #
-#        ready provided:                                                      #
-#          ==> MyPass01!                                          [-p option] #
-#        All (back-ground) processes may not take longer to complete than:    #
-#          ==> 60 seconds                                         [-m option] #
-#        No more than a maximum of given (back-ground) processes will be      #
-#        operational at the same time:                                        #
-#          ==> 45 back-ground processes                           [-n option] #
-#        The operator won't be prompted to select/acknowledge the system(s)   #
-#        on which the remote command(s)/script(s) will be launched.           #
-#                                                                 [-N option] #
-#        Detailed output is not displayed.                        [-Q option] #
+# By launching the script such as displayed in the example above, then the    #
+# following will actually happen:                                             #
+# 1.  [-x option]                                                             #
+# The specified script will be executed (as root!):                           #
+#   => /tech/local/sbin/ignore-NW_down.sh --on                                #
+# The thereafter specified command will NOT be executed as root:              #
+#   => uptime                                                                 #
+# 2. [-S option]                                                              #
+# The -S flag causes the 1st specified command/script to be executed as root  #
+# and all others therefter will NOT be executed as root (unless they are      #
+# specified by: sudo <cmd>).                                                  #
+# 3. [-f option]                                                              #
+# Script and command will be executed on the systems (once they were tested   #
+# to be available) such as specified in the file:                             #
+#   => /tmp/system-list                                                       #
+# (System can also be specified directly: -s "sys1 sys2 sys3" or by using the #
+#  -e|-A|-t input-parameters).                                                #
+# 4. [-p option]                                                              #
+# Operator won't be prompted for a password, since it was already provided:   #
+#   => MyPass01!                                                              #
+# 5. [-m option]                                                              #
+# All (back-ground) processes may not take longer to complete than:           #
+#   => 60 seconds                                                             #
+# 6. [-n option]                                                              #
+# No more than a maximum of given (back-ground) processes will be operational #
+# at the same time:                                                           #
+#   => 45 back-ground processes                                               #
+# 7. [-w option]                                                              #
+# The number of seconds to be waited before checking process(es) are still    #
+# running:                                                                    #
+#   => 10 seconds                                                             #
+# 8. [-w option]                                                              #
+# The operator won't be prompted to select/acknowledge the system(s) on which #
+# the remote command(s)/script(s) will be launched.                           #
+# 9. [-Q option]                                                              #
+# Detailed output is not displayed.                                           #
+#                                                                             #
+# LAST-LINE: DO NOT REMOVE -------------------------------------------------- #
 #                                                                             #
 ###############################################################################
 # Define the needed/required variables.                                       #
 ###############################################################################
 InitSettings(){
 MAX_PROC=30
+MAX_SECS=600
   OUTDIR=/tmp/.rem-exec/$(id -un)/$$ 
  LOGFILE=/tmp/.rem-exec/$(id -un)/.$(basename $0).$$
  SSHPASS=/usr/bin/sshpass
@@ -190,9 +228,9 @@ do
             #
             # Don't allow the sleep-time to be greater than the number of seconds an individual processes may take:
             #
-            if [ ${OPTARG} -gt ${MAX_SECS:-600} ]
+            if [ ${OPTARG} -gt ${MAX_SECS} ]
             then
-                SLEEP="${MAX_SECS:-600}"
+                SLEEP="${MAX_SECS}"
             else
                 SLEEP="${OPTARG}"
             fi
@@ -310,7 +348,7 @@ do
       #
       # In case of the background process is still running and longer than the ${MAX_SECS} number of seconds; have it killed:
       #
-      if [ $(expr $(date +%s) - ${STARTED}) -gt ${MAX_SECS:=600} ]
+      if [ $(expr $(date +%s) - ${STARTED}) -gt ${MAX_SECS} ]
       then
           [[ "${QUIET:=false}" != "true" ]] && echo -e "\n\tBackground process is running too long for system: ${USED_SYS} ${PROC} will be killed..."
           kill ${PROC} 2>/dev/null
@@ -587,7 +625,7 @@ done
 for SYSTEM in ${SYSTEMS}
 do
   #
-  # Very first step is to obtain a free file-descriptor, or just wait for 1 to become available:
+  # Very first step in processing is to obtain a free file-descriptor, or just wait for 1 to become available:
   #
   unset        DESCRIPTOR
   while [ -z ${DESCRIPTOR} ]
@@ -640,6 +678,24 @@ done
   echo -e "\n\n\t(For details regarding this session, check: ${LOGFILE})\n"
 }
 
+################################################################################
+# Ask to proceed when is established lancher is started interactively.         #
+################################################################################
+AskToProceed(){
+if [ $(tty 1>/dev/null 2>&1;echo $?) -eq 0 ]
+then
+    echo -e   "\n\t          Do you wish to proceed? [Y|N] ==>: \c"
+    read   PROCEED
+    case ${PROCEED} in
+        n|N) CleanUpAndExit ;;
+        y|Y) PROCEED=true   ;;
+          *) unset PROCEED  ;;
+    esac
+else
+    PROCEED=true
+fi
+}
+
 ############################## Main Script #####################################
 #______________________________________________________________________________#
 #                                                                              #
@@ -655,13 +711,7 @@ then
       clear
       echo -e "\n\n\t $(tput rev)**NOTE**$(tput sgr0) You're logged on as root ..."
       echo -e     "\t          Therefore the user sftuser (without sudo!) will be used."
-      echo -e   "\n\t          Do you wish to proceed? [Y|N] ==>: \c"
-      read   PROCEED
-      case ${PROCEED} in
-         n|N) CleanUpAndExit ;;
-         y|Y) PROCEED=true   ;;
-           *) unset PROCEED  ;;
-      esac
+      AskToProceed
     done
     I_AM_ROOT=true  
 else
@@ -669,23 +719,19 @@ else
 fi
 # 
 # When the ${OUTDIR}-directory doesn't exist it is assumed the tool is being used for the very first time by $(id -un), display a screen containing some warnings and  
-# the instructions regarding the usage:
+# the instructions regarding the usage (from the upper part of this script):
 #
-if [ -d $(dirname ${OUTDIR}) ]
+if [ ! -d $(dirname ${OUTDIR}) ]
 then
+    eval $(awk '$1 ~ /^#$/ && $2 ~ /^START-LINE:$/ { print "BEGIN="NR      }
+                $1 ~ /^#$/ && $2 ~ /^LAST-LINE:$/  { print  "LAST="NR;break }' $0 2>/dev/null)
     while [ -z "${PROCEED}" ]
     do
       clear
-      echo -e "\n\n\t $(tput rev)**NOTE**$(tput sgr0) First time usage detected for: $(id -un)\n"
-      awk 'NR>48 && NR<87 { sub( "^#", "", $0 )  
-                            sub( "#$", "", $0 ) ; print "\t"$0 }' $0
-      echo -e   "\n\t          Do you wish to proceed? [Y|N] ==>: \c"
-      read   PROCEED
-      case ${PROCEED} in
-         n|N) CleanUpAndExit ;;
-         y|Y) PROCEED=true   ;;
-           *) unset PROCEED  ;;
-      esac
+      ( echo -e "\n\n\t $(tput rev)**NOTE**$(tput sgr0) First time usage detected for: $(id -un)\n"
+        awk 'NR>'${BEGIN}' && NR<'${LAST}' { sub( "^#", "", $0 )  
+                                             sub( "#$", "", $0 ) ; print "\t"$0 }END{ print "\t\t--------------------------------------------------------------------" }' $0 ) | more
+      AskToProceed
     done
 fi
 mkdir -p ${OUTDIR}
