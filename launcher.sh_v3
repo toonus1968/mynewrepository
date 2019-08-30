@@ -174,9 +174,10 @@ ProcessCMDLineArguments(){
 while getopts :e:f:m:n:p:s:t:w:x:ADLNSQ FLAG
 do
   case ${FLAG} in
-     A) TYPE[0]=PLANNED ; TYPE[1]=OPERATION
-        [[ -n "${SPECIFIED}" ]] && DisplayErrorAndExit ;;
-     e) case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
+     A) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        TYPE[0]=PLANNED ; TYPE[1]=OPERATION            ;;
+     e) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
            AE) ENV=AE                                  ;;
           AVE) ENV=AVE                                 ;;
            DE) ENV=DE                                  ;;
@@ -185,16 +186,14 @@ do
            SE) ENV=SE                                  ;;
            TE) ENV=TE                                  ;;
             *) DisplayErrorAndExit                     ;;
-        esac
-        [[ -n "${SPECIFIED}" ]] && DisplayErrorAndExit ;;
-     f) if [ -s ${OPTARG} ]
+        esac                                           ;;
+     f) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        if [ -s ${OPTARG} ]
         then
             SPECIFIED="$(awk '$1 !~ /^#/ { print $0 }' ${OPTARG})"
         else
             DisplayErrorAndExit
-        fi
-        [[ -n "${TYPE}" ]] && DisplayErrorAndExit
-        [[ -n "${ENV}"  ]] && DisplayErrorAndExit      ;;
+        fi                                             ;;
      m) if [ $(echo "${OPTARG}" | egrep ^[[:digit:]]+$ | wc -l) -eq 0 ]
         then
             DisplayErrorAndExit
@@ -213,10 +212,10 @@ do
         else
             DisplayErrorAndExit
         fi                                             ;;
-     s) SPECIFIED="${OPTARG}"
-        [[ -n "${TYPE}" ]] && DisplayErrorAndExit
-        [[ -n "${ENV}"  ]] && DisplayErrorAndExit      ;;
-     t) case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
+     s) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        SPECIFIED="${OPTARG}"                          ;;
+     t) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
              PLANNED) TYPE=PLANNED                     ;;
            OPERATION) TYPE=OPERATION                   ;;
                    *) DisplayErrorAndExit              ;;
@@ -255,7 +254,7 @@ done
 DisplayErrorAndExit(){
 echo -e "\n\t$(tput rev)**ERROR**$(tput sgr0) usage: $(basename $0)\n\t\t\t -x \"<command to execute>\"\n\c"
 echo -e "\n\t\t\t -A   (=ALL; Planned and Operation)     |\n\c" 
-echo -e   "\t\t\t -t <PLANNED | OPERATION>               |\n\c"
+echo -e   "\t\t\t -t <PLANNED  | OPERATION>              |\n\c"
 echo -e   "\t\t\t -e <AE | AVE | DE | EE | LE | SE | TE> |\n\c"
 echo -e   "\t\t\t -s \"<system> <system> <system> ...\"    |\n\c"
 echo -e   "\t\t\t -f  <file>\n\n\c"
@@ -377,7 +376,7 @@ AskForUserPassword(){
 while [[ "${PASS_I:=unknown_I}" != "${PASS_II:=unknown_II}" ]]
 do
   echo -e "\n\tPlease enter password for $(id -un): \c";stty -echo; read PASS_I ;stty echo ;echo
-  echo -e "\n\tEnter the new password again: \c"       ;stty -echo; read PASS_II;stty echo ;echo
+  echo -e "\n\tEnter the password again: \c"           ;stty -echo; read PASS_II;stty echo ;echo
   if [[ "${PASS_I:=unknown_I}" != "${PASS_II:=unknown_II}" ]]
   then
       clear;echo -e "\n\tThe password entries do not match or they're empty, please try again."

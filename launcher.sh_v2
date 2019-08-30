@@ -118,9 +118,9 @@ MAX_PROC=30
 DisplayErrorAndExit(){
 if [ "${I_AM_ROOT}" != "true" ]
 then
-    echo -e "\n\t$(tput rev)**ERROR**$(tput sgr0) usage: $(basename $0)\n\t\t\t -x \"<command to execute>\"\n\t\t\t -A   (PLANNED and OPERATION) | -t <PLANNED|OPERATION> | -e <AE|AVE|DE|EE|LE|UTE|SE|TE|ITE> | -s \"<system> ...\"\n\t\t       [ -m <max seconds> ]\n\t\t       [ -n <max processes> ]\n\t\t       [ -p <password> ]\n\t\t       [ -D ] (Do NOT use sudo)\n\t\t       [ -L ] (use Local copy)\n\t\t       [ -N ] (No confirmations asked)\n\t\t       [ -Q ] (Quiet mode)\n\n"
+    echo -e "\n\t$(tput rev)**ERROR**$(tput sgr0) usage: $(basename $0)\n\t\t\t -x \"<command to execute>\"\n\t\t\t -A   (PLANNED and OPERATION) | -t <PLANNED|OPERATION> | -e <AE|AVE|DE|EE|LE|SE|TE> | -s \"<system> ...\"\n\t\t       [ -m <max seconds> ]\n\t\t       [ -n <max processes> ]\n\t\t       [ -p <password> ]\n\t\t       [ -D ] (Do NOT use sudo)\n\t\t       [ -L ] (use Local copy)\n\t\t       [ -N ] (No confirmations asked)\n\t\t       [ -Q ] (Quiet mode)\n\n"
 else
-    echo -e "\n\t$(tput rev)**ERROR**$(tput sgr0) usage: $(basename $0)\n\t\t\t -x \"<command to execute>\"\n\t\t\t -A  (PLANNED and OPERATION) | -t <PLANNED|OPERATION> | -e <AE|AVE|DE|EE|LE|UTE|SE|TE|ITE> | -s \"<system> ...\"\n\t\t       [ -m <max seconds> ]\n\t\t        [ -n <max processes> ]\n\t\t       [ -D ] (Do NOT use sudo)\n\t\t       [ -L ] (use Local copy)\n\t\t[ -N ] (No confirmations asked)\n\t\t       [ -Q ] (Quiet mode)\n\n"
+    echo -e "\n\t$(tput rev)**ERROR**$(tput sgr0) usage: $(basename $0)\n\t\t\t -x \"<command to execute>\"\n\t\t\t -A  (PLANNED and OPERATION) | -t <PLANNED|OPERATION> | -e <AE|AVE|DE|EE|LE|SE|TE> | -s \"<system> ...\"\n\t\t       [ -m <max seconds> ]\n\t\t        [ -n <max processes> ]\n\t\t       [ -D ] (Do NOT use sudo)\n\t\t       [ -L ] (use Local copy)\n\t\t[ -N ] (No confirmations asked)\n\t\t       [ -Q ] (Quiet mode)\n\n"
 fi
 CleanUpAndExit
 }
@@ -174,7 +174,7 @@ AskForUserPassword(){
 while [[ "${PASS_I:=unknown_I}" != "${PASS_II:=unknown_II}" ]]
 do
   echo -e "\n\tPlease enter password for $(id -un): \c";stty -echo; read PASS_I ;stty echo ;echo
-  echo -e "\n\tEnter the new password again: \c"       ;stty -echo; read PASS_II;stty echo ;echo
+  echo -e "\n\tEnter the password again: \c"           ;stty -echo; read PASS_II;stty echo ;echo
   if [[ "${PASS_I:=unknown_I}" != "${PASS_II:=unknown_II}" ]]
   then
       clear;echo -e "\n\tThe password entries do not match or they're empty, please try again."
@@ -210,13 +210,18 @@ then
                      # -1 Known systems which are not added correctly to the CMDB:
                      # -2 Exclude ESX systems:
                      # -3 Get only those hosts for which the hostname starts with kl:
-                     # -4 If applicable: get the specified environment AE|AVE|DE|EE|LE|UTE|SE|TE|ITE:
+                     # -4 If applicable: get the specified environment AE|AVE|DE|EE|LE|SE|TE:
                      # -5 If applicable: get the specified type: PLANNED|OPERATION or both:
                      #
                      $1          !~ /^kl13322d$/                && \
                      $1          !~ /^kl122a91$/                && \
                      $1          !~ /^kl122a80$/                && \
                      $1          !~ /^kl143com$/                && \
+                     $1          !~ /^kl13843p$/                && \
+                     $1          !~ /^kl134e1u$/                && \
+                     $1          !~ /^kl1379vi$/                && \
+                     $1          !~ /^kl12333c$/                && \
+                     $1          !~ /^kl1106sd$/                && \
                      tolower($5) !~ /vmware esx server/         && \
                      $1           ~ /^kl/                       && \
                      env[2]       ~ /'${ENV:-E}'$/              && \
@@ -525,20 +530,19 @@ fi
 while getopts :e:m:n:p:s:t:x:ADLNQ FLAG
 do
   case ${FLAG} in
-     A) TYPE[0]=PLANNED ; TYPE[1]=OPERATION            ;;
-     e) case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
+     A) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        TYPE[0]=PLANNED ; TYPE[1]=OPERATION            ;;
+     e) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
            AE) ENV=AE                                  ;;
           AVE) ENV=AVE                                 ;;
            DE) ENV=DE                                  ;;
            EE) ENV=EE                                  ;;
            LE) ENV=LE                                  ;;
-          UTE) ENV=UTE                                 ;;
            SE) ENV=SE                                  ;;
            TE) ENV=TE                                  ;;
-          ITE) ENV=ITE                                 ;;
             *) DisplayErrorAndExit                     ;;
-        esac
-        [[ -n "${SPECIFIED}" ]] && DisplayErrorAndExit ;;
+        esac                                           ;;
      m) if [ $(echo "${OPTARG}" | egrep ^[[:digit:]]+$ | wc -l) -eq 0 ]
         then
             DisplayErrorAndExit
@@ -557,10 +561,10 @@ do
         else
             DisplayErrorAndExit
         fi                                             ;;
-     s) SPECIFIED="${OPTARG}"
-        [[ -n "${TYPE}"      ]] && DisplayErrorAndExit
-        [[ -n "${ENV}"       ]] && DisplayErrorAndExit ;;
-     t) case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
+     s) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        SPECIFIED="${OPTARG}"                          ;;
+     t) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
+        case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
              PLANNED) TYPE=PLANNED                     ;;
            OPERATION) TYPE=OPERATION                   ;;
                    *) DisplayErrorAndExit              ;;
