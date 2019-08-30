@@ -20,7 +20,7 @@
 #          running simultaneously running (until all systems are processed).  #
 #          Modified the test to establish whether a system is operational;    #
 #          replaced using ping by tcping.                                     #
-#          Anthony (3.0.0: Aug 28th 2019):                                    #
+#          Anthony (3.0.0: Aug 30th 2019):                                    #
 #          - Changed the approach of processing the systems; not to be done   #
 #            batch-wise anymore. Now process as much as systems (${MAX_PROC}) #
 #            are allowed to be operational at the same time; as soon as a     #
@@ -175,51 +175,51 @@ while getopts :e:f:m:n:p:s:t:w:x:ADLNSQ FLAG
 do
   case ${FLAG} in
      A) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
-        TYPE[0]=PLANNED ; TYPE[1]=OPERATION            ;;
+        TYPE[0]=PLANNED;TYPE[1]=OPERATION ;;
      e) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
         case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
-           AE) ENV=AE                                  ;;
-          AVE) ENV=AVE                                 ;;
-           DE) ENV=DE                                  ;;
-           EE) ENV=EE                                  ;;
-           LE) ENV=LE                                  ;;
-           SE) ENV=SE                                  ;;
-           TE) ENV=TE                                  ;;
-            *) DisplayErrorAndExit                     ;;
-        esac                                           ;;
+           AE) ENV=AE                     ;;
+          AVE) ENV=AVE                    ;;
+           DE) ENV=DE                     ;;
+           EE) ENV=EE                     ;;
+           LE) ENV=LE                     ;;
+           SE) ENV=SE                     ;;
+           TE) ENV=TE                     ;;
+            *) DisplayErrorAndExit        ;;
+        esac                              ;;
      f) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
         if [ -s ${OPTARG} ]
         then
             SPECIFIED="$(awk '$1 !~ /^#/ { print $0 }' ${OPTARG})"
         else
             DisplayErrorAndExit
-        fi                                             ;;
+        fi                                ;;
      m) if [ $(echo "${OPTARG}" | egrep ^[[:digit:]]+$ | wc -l) -eq 0 ]
         then
             DisplayErrorAndExit
         else
             MAX_SECS="${OPTARG}"
-        fi                                             ;;
+        fi                                ;;
      n) if [[ $(echo "${OPTARG}" | egrep ^[[:digit:]]+$ | wc -l) -eq 0 || ${OPTARG} -eq 0 || ${OPTARG} -gt 150 ]]
         then
             DisplayErrorAndExit
         else
             MAX_PROC="${OPTARG}"
-        fi                                             ;;
+        fi                                ;;
      p) if [ "${I_AM_ROOT}" != "true" ]
         then
             PASSWORD="${OPTARG}"
         else
             DisplayErrorAndExit
-        fi                                             ;;
+        fi                                ;;
      s) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
-        SPECIFIED="${OPTARG}"                          ;;
+        SPECIFIED="${OPTARG}"             ;;
      t) [[ -n "${ENV}" || -n "${TYPE}" || -n "${SPECIFIED}" ]] && DisplayErrorAndExit
         case $(echo ${OPTARG} | awk '{ print toupper($1) }') in
-             PLANNED) TYPE=PLANNED                     ;;
-           OPERATION) TYPE=OPERATION                   ;;
-                   *) DisplayErrorAndExit              ;;
-        esac                                           ;;
+             PLANNED) TYPE=PLANNED        ;;
+           OPERATION) TYPE=OPERATION      ;;
+                   *) DisplayErrorAndExit ;;
+        esac                              ;;
      w) if [[ $(echo "${OPTARG}" | egrep ^[[:digit:]]+$ | wc -l) -eq 0 || ${OPTARG} -eq 0 ]]
         then
             DisplayErrorAndExit
@@ -233,17 +233,17 @@ do
             else
                 SLEEP="${OPTARG}"
             fi
-        fi                                             ;;
-     x) COMMAND="${OPTARG}"                            ;;
+        fi                                ;;
+     x) COMMAND="${OPTARG}"               ;;
      D) [[ -n "${DO_NOT_SUDO}"     ]] && DisplayErrorAndExit
-        DO_NOT_SUDO=true                               ;;
-     L) USE_LOCAL_COPY=true                            ;;
-     N) CONFIRM=false                                  ;;
-     Q) QUIET=true                                     ;;
+        DO_NOT_SUDO=true                  ;;
+     L) USE_LOCAL_COPY=true               ;;
+     N) CONFIRM=false                     ;;
+     Q) QUIET=true                        ;;
      S) [[ -n "${DO_NOT_SUDO}"     ]] && DisplayErrorAndExit
         [[ "${I_AM_ROOT}" = "true" ]] && DisplayErrorAndExit
-        DO_NOT_SUDO=false                              ;;
-     *) DisplayErrorAndExit                            ;;
+        DO_NOT_SUDO=false                 ;;
+     *) DisplayErrorAndExit               ;;
   esac
 done
 }
@@ -349,8 +349,15 @@ do
       #
       if [ $(expr $(date +%s) - ${STARTED}) -gt ${MAX_SECS} ]
       then
-          [[ "${QUIET:=false}" != "true" ]] && echo -e "\n\tBackground process is running too long for system: ${USED_SYS} ${PROC} will be killed..."
-          kill ${PROC} 2>/dev/null
+          typeset -i ATTEMPT=0
+          while [[ ${ATTEMPT} -lt 3 && $(ps -p ${PROC} | wc -l) -eq 2 ]]
+          do
+                   ((ATTEMPT+=1))
+            [[     ${ATTEMPT}    -eq 3     ]] && SIGNAL=9
+            [[ "${QUIET:=false}" != "true" ]] && echo -e "\n\tBackground process is running too long for system: ${USED_SYS} ${PROC} will be killed..."
+            kill -${SIGNAL:=1} ${PROC} 2>/dev/null
+            sleep 0.5
+          done
           GetAndSetStatus
       fi
   else
@@ -598,6 +605,7 @@ while [[ $(echo ${EXCLUDES} | grep -wc $(echo ${SYSTEMS} | awk '{ print $(1+'${N
 do
   ((NUM+=1))
 done
+   ALL=$(echo ${SYSTEMS} | wc -w)
 SYSTEM=$(echo ${SYSTEMS} | awk '{ print $(1+'${NUM}') }')
 PerformRemoteExecute ${PASSWORD:-none} "/usr/bin/id -un" 1>/dev/null 2>&1
 if [ $? -eq 0 ]
@@ -621,20 +629,21 @@ fi
 #
 # Initiate the free file-descriptors pool:(the +3 is due to the fact the first 2 file-descriptors can not be used (stdout and stderr); will start from the 3rd descriptor):
 #
-typeset -i NUM=3 EXCLUDED=0 UNAVAILABLE=0 FAILED=0 SUCCEEDED=0
+typeset -i NUM=3 EXCLUDED=0 UNAVAILABLE=0 FAILED=0 SUCCEEDED=0 DONE=1
 while [  ${NUM} -lt $(expr ${MAX_PROC} + 3) ]
 do
   FREE_DESCR[${NUM}]=${NUM};((NUM+=1))
 done
 for SYSTEM in ${SYSTEMS}
 do
+  PROGRESS="$(echo ${DONE} ${ALL} | awk '{ printf "(#%04d of %04d)\n",$1,$2 }')"
   #
   # Test whether ${SYSTEM} is 1 of the systems which have to be excluded by default:
   #
   if [ $(echo ${EXCLUDES} | grep -wc ${SYSTEM}) -ne 0 ] 
   then
       ((EXCLUDED+=1));EXCLUDED_HOSTS="${EXCLUDED_HOSTS} ${SYSTEM}"
-      [[     "${QUIET:=false}" != "true" ]] && printf "\n\t%20s %-30s\n\n" ${SYSTEM}: "is excluded by default..."
+      [[     "${QUIET:=false}" != "true" ]] && printf "\n\t%32s %-30s\n\n" "${SYSTEM} ${PROGRESS}:" "is excluded by default..."
   else
       #
       # Test whether ${SYSTEM}'s hostname can be resolved and if it is reachable over the network:
@@ -643,7 +652,7 @@ do
       if [[ $? -ne 0 || $(/usr/local/bin/tcping -qt1 -u1 ${SYSTEM} 22 1>/dev/null 2>&1;echo $?) -ne 0 ]]
       then
           ((UNAVAILABLE+=1));UNAVAILABLE_HOSTS="${UNAVAILABLE_HOSTS} ${SYSTEM}"
-          [[ "${QUIET:=false}" != "true" ]] && printf "\n\t%20s %-30s\n\n" ${SYSTEM}: "seems to be UNavailable..."
+          [[ "${QUIET:=false}" != "true" ]] && printf "\n\t%32s %-30s\n\n" "${SYSTEM} ${PROGRESS}:" "seems to be UNavailable..."
       else
           #
           # Very first step in processing is to obtain a free file-descriptor, or just wait for 1 to become available:
@@ -657,7 +666,7 @@ do
           #
           # Once detected the ${SYSTEM} is operational, have the he remote-execution (by root) carried out:
           #
-          [[ "${QUIET:=false}" != "true" ]] && printf   "\t%20s %-30s\n"   ${SYSTEM}: "seems to be operational, let's go..."
+          [[ "${QUIET:=false}" != "true" ]] && printf "\t%32s %-30s\n" "${SYSTEM} ${PROGRESS}:" "seems to be operational, let's go..."
           eval exec "${DESCRIPTOR}>${OUTDIR}/.${DESCRIPTOR}_stdout-$(id -un)::${SYSTEM}"
           ( PerformRemoteExecute ${PASSWORD:-none}  
             echo ${SYSTEM}:$?
@@ -665,6 +674,7 @@ do
           RUNNING[${DESCRIPTOR}]=$!:${DESCRIPTOR}:$(date +%s):${SYSTEM}
       fi
   fi
+  ((DONE+=1))
 done
 #
 # Wait for all background remote-cmd processes to complete:
@@ -683,8 +693,8 @@ done
   echo      ${FAILED_HOSTS} | fold -sw120 | awk '{ sub(/^[ ]+/, "" ); print "     FAILED_HOSTS="$0 }' 
   echo
 ) >>       ${LOGFILE}
-( echo -e "\n\t       Total number of excluded systems: ${EXCLUDED:=0}"
-  echo -e   "\t    Total number of systems unavailable: ${UNAVAILABLE:=0}"
+( echo -e "\n\t     Total number of - excluded systems: ${EXCLUDED:=0}"
+  echo -e   "\t                  - systems unavailable: ${UNAVAILABLE:=0}"
   echo -e   "\tRemote commands - successfully executed: ${SUCCEEDED:=0}"
   echo -e   "\t                      failed to execute: ${FAILED:=0}"
   echo -e   "\t---------------------------------------:----------"
@@ -791,7 +801,7 @@ fi
 #
 # When all conditions are met, go launch the command/script (that is where it all happens...):
 #
-[[ -n      "${SYSTEMS[@]}" ]] && LaunchRemoteCMDS
+[[ -n "${SYSTEMS[@]}" ]] && LaunchRemoteCMDS
 CleanUpAndExit
 #______________________________________________________________________________#
 #                                                                              #
