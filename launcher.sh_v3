@@ -28,7 +28,7 @@
 #            it.                                                              #
 #          - Added the recognition of "ranges" in the screen in which systems #
 #            can be selected.                                                 #
-#          - Added the recognition of the input-paramters:                    #
+#          - Added the recognition of the input-parameters:                   #
 #            -w   : number of seconds to be waited before checking process(es)#
 #                   are still running.                                        #
 #            -D|S : either -D (do-not-use-sudo) or -S (do-use-sudo) must(!)   #
@@ -337,7 +337,7 @@ GetFreeDescriptor(){
 ###############################################################################
 MonitorBackGroundProcs(){ 
 #
-# Have running background processes properly monitored (do not use the shell-builtin "wait" [it might wait to eternity... :-(]) for their activity:
+# Have running background processes properly monitored (do not use the shell-builtin "wait" [it might wait to eternity... : -(]) for their activity:
 #
 for PROC in ${RUNNING[@]}
 do
@@ -350,7 +350,7 @@ do
       if [ $(expr $(date +%s) - ${STARTED}) -gt ${MAX_SECS} ]
       then
           typeset -i ATTEMPT=0
-          while [[ ${ATTEMPT} -lt 3 && $(ps -p ${PROC} | wc -l) -eq 2 ]]
+          while [[ $(ps -p ${PROC} | wc -l) -eq 2 && ${ATTEMPT} -lt 3 ]]
           do
                    ((ATTEMPT+=1))
             [[     ${ATTEMPT}    -eq 3     ]] && SIGNAL=9
@@ -779,7 +779,8 @@ if [[ "${I_AM_ROOT}" != "true" && -n "${PASSWORD}" && $(grep -w $(basename $0) ~
 then
     sed -i -e 's/-p'${PASSWORD}'/-pXXXXXXX/g' -e 's/-p '${PASSWORD}'/-p XXXXXXX/g' ~/.bash_history 2>/dev/null
 fi
-echo -e "\n$(date): $(basename $0) $@ \n" | awk '{ print "## "$0 }' > ${LOGFILE}
+echo -e "\n$(date): $(basename $0) $@ \n" | awk '{ sub(  "-p'${PASSWORD}'",  "-pXXXXXXX", $0 )
+                                                   sub( "-p '${PASSWORD}'", "-p XXXXXXX", $0 ); print "## "$0 }' > ${LOGFILE}
 GetAllKnownSystems
 #
 # Do not ask to confirm or select systems when the -N flag was passed on to the script:

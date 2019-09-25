@@ -596,9 +596,9 @@ done
 #
 if [[ "${I_AM_ROOT}" != "true" && -n "${PASSWORD}" && $(grep -w $(basename $0) ~/.bash_history 2>/dev/null | grep -w "${PASSWORD}" 2>/dev/null | wc -l) -ne 0 ]]
 then
-    sed -i -e 's/-p'${PASSWORD}'/-pXXXXXXX/g' -e 's/-p '${PASSWORD}'/-p XXXXXXX/g' ~/.bash_history 2>/dev/null
+    sed -i -e 's/-p'${PASSWORD}'/-pXXXXXXX/g' -e   's/-p '${PASSWORD}'/-p XXXXXXX/g' ~/.bash_history 2>/dev/null
 fi
-echo -e "\n$(date): $(basename $0) $@ \n" | awk '{ print "## "$0 }' > ${LOGFILE}
+echo -e "\n$(date): $(basename $0) $@ \n" | awk '{ gsub("'${PASSWORD}'", "XXXXXXX", $0 ); print "## "$0 }' > ${LOGFILE}
 GetAllKnownSystems
 #
 # Do not ask to confirm or select systems when the -N flag was passed on to the script:
